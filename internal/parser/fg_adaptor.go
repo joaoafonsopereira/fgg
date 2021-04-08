@@ -274,3 +274,11 @@ public override void Recover(LexerNoViableAltException e)
 	BasicEnvironment.ErrorStartIndex = e.StartIndex;
 	throw new ParseCanceledException(BasicEnvironment.SyntaxError);
 }*/
+
+
+/* Primitive type literals */
+
+func (a *FGAdaptor) ExitIntLit(ctx *parser.IntLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fg.NewIntLit(lit))
+}

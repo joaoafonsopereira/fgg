@@ -20,6 +20,10 @@ FMT       : 'fmt' ;
 PRINTF    : 'Printf' ;
 SPRINTF   : 'Sprintf' ;
 
+// base/primitive types
+INT8      : 'int8' ;
+INT32     : 'int32' ;
+INT64     : 'int64' ;
 
 /* Tokens */
 
@@ -33,6 +37,9 @@ COMMENT         : '/*' .*? '*/' -> channel(HIDDEN) ;
 LINE_COMMENT    : '//' ~[\r\n]* -> channel(HIDDEN) ;
 STRING          : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' | ')' | '+' | '-')* '"' ;
 
+INT_LIT         : DIGIT+ ;
+
+BASE_TYPE       : INT8 | INT32 | INT64 ;
 
 /* Rules */
 
@@ -54,20 +61,26 @@ methDecl   : FUNC '(' paramDecl ')' sig '{' RETURN expr '}' ;
 typeLit    : STRUCT '{' fieldDecls? '}'             # StructTypeLit
            | INTERFACE '{' specs? '}'               # InterfaceTypeLit ;
 fieldDecls : fieldDecl (';' fieldDecl)* ;
-fieldDecl  : field=NAME typ=NAME ;
+//fieldDecl  : field=NAME typ=NAME ;
+fieldDecl  : field=NAME typ=typeName ;
 specs      : spec (';' spec)* ;
 spec       : sig                                    # SigSpec
            | NAME                                   # InterfaceSpec
            ;
-sig        : meth=NAME '(' params? ')' ret=NAME ;
+//sig        : meth=NAME '(' params? ')' ret=NAME ;
+sig        : meth=NAME '(' params? ')' ret=typeName ;
 params     : paramDecl (',' paramDecl)* ;
-paramDecl  : vari=NAME typ=NAME ;
+//paramDecl  : vari=NAME typ=NAME ;
+paramDecl  : vari=NAME typ=typeName ;
+typeName   : NAME
+           | BASE_TYPE ;
 expr       : NAME                                   # Variable
            | NAME '{' exprs? '}'                    # StructLit
            | expr '.' NAME                          # Select
            | recv=expr '.' NAME '(' args=exprs? ')' # Call
            | expr '.' '(' NAME ')'                  # Assert
            | FMT '.' SPRINTF '(' (STRING | '"%#v"') (',' | expr)* ')'  # Sprintf
+           | lit=INT_LIT                            # IntLit
            ;
 exprs      : expr (',' expr)* ;
 
