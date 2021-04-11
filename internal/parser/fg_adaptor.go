@@ -69,7 +69,7 @@ func (a *FGAdaptor) ExitTNamed(ctx *parser.TNamedContext) {
 }
 
 func (a *FGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
-	tag := fg.NameToTags[ctx.GetName().GetText()]
+	tag := fg.TagFromName(ctx.GetName().GetText())
 	a.push(fg.NewTPrimitive(tag, false))
 }
 

@@ -153,7 +153,10 @@ func (t0 TPrimitive) Equals(t base.Type) bool {
 }
 
 func (t TPrimitive) String() string {
-	return "TPrimitive{tag=" + strconv.Itoa(int(t.tag)) + ", undefined=" + strconv.FormatBool(t.undefined) + "}"
+	return "TPrimitive{" +
+		"tag=" + strconv.Itoa(int(t.tag)) +
+		", undefined=" + strconv.FormatBool(t.undefined) +
+	"}"
 }
 
 
