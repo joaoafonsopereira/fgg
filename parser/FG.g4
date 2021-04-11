@@ -39,7 +39,6 @@ STRING          : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' 
 
 INT_LIT         : DIGIT+ ;
 
-BASE_TYPE       : INT8 | INT32 | INT64 ;
 
 /* Rules */
 
@@ -50,6 +49,13 @@ BASE_TYPE       : INT8 | INT32 | INT64 ;
 // "plurals", e.g., decls, used for sequences: comes out as "helper" Contexts,
 // nodes that group up actual children underneath -- makes "adapting" easier.
 
+primitiveType       : INT8 | INT32 | INT64 ;
+//PRIMITIVE_TYPE       : 'int8' | 'int32' | 'int64' ;
+
+//typeName   : name=PRIMITIVE_TYPE                         # TPrimitive
+typeName   : name=primitiveType                          # TPrimitive
+           | name=NAME                                   # TNamed
+           ;
 program    : PACKAGE MAIN ';'
              (IMPORT STRING ';')?
              decls? FUNC MAIN '(' ')' '{'
@@ -62,23 +68,21 @@ typeLit    : STRUCT '{' fieldDecls? '}'             # StructTypeLit
            | INTERFACE '{' specs? '}'               # InterfaceTypeLit ;
 fieldDecls : fieldDecl (';' fieldDecl)* ;
 //fieldDecl  : field=NAME typ=NAME ;
-fieldDecl  : field=NAME typ=typeName ;
+fieldDecl  : field=NAME typeName ;
 specs      : spec (';' spec)* ;
 spec       : sig                                    # SigSpec
            | NAME                                   # InterfaceSpec
            ;
 //sig        : meth=NAME '(' params? ')' ret=NAME ;
-sig        : meth=NAME '(' params? ')' ret=typeName ;
+sig        : meth=NAME '(' params? ')' typeName ;
 params     : paramDecl (',' paramDecl)* ;
 //paramDecl  : vari=NAME typ=NAME ;
-paramDecl  : vari=NAME typ=typeName ;
-typeName   : NAME
-           | BASE_TYPE ;
+paramDecl  : vari=NAME typeName ;
 expr       : NAME                                   # Variable
            | NAME '{' exprs? '}'                    # StructLit
            | expr '.' NAME                          # Select
            | recv=expr '.' NAME '(' args=exprs? ')' # Call
-           | expr '.' '(' NAME ')'                  # Assert
+           | expr '.' '(' typeName ')'              # Assert
            | FMT '.' SPRINTF '(' (STRING | '"%#v"') (',' | expr)* ')'  # Sprintf
            | lit=INT_LIT                            # IntLit
            ;

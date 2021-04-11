@@ -430,3 +430,34 @@ func TestEval008(t *testing.T) {
 	prog := fgParseAndOkGood(t, imp, A, e)
 	testutils.EvalAndOkGood(t, prog, 1)
 }
+
+
+/* Primitive types */
+
+// Testing Impls with integers
+func Test019(t *testing.T) {
+	A := "type A struct { a int32 }"
+	Am := "func (x0 A) id(i int32) int32 { return i }"
+	e := "A{5}.id(10)"
+	fgParseAndOkGood(t, A, Am, e)
+}
+
+func Test019b(t *testing.T) {
+	A := "type A struct {}"
+	Am := "func (x0 A) id(i int32) int32 { return i }"
+	e := "A{}.id(A{})"
+
+	//expectedPanic := "Arg expr type must implement param type: arg=A, param=int32" // !(A <: int)
+	//fgParseAndOkBad(t, expectedPanic, A, Am, e)
+	fgParseAndOkGood(t, A, Am, e)
+}
+
+func Test019c(t *testing.T) {
+	Any := "type Any interface {}"
+	A := "type A struct {}"
+	Am := "func (x0 A) m(i Any) I { return i }"
+	e := "A{}.m(5)"
+
+	expectedPanic := "Arg expr type must implement param type: arg=int, param=Any" // !(int <: Any)
+	fgParseAndOkBad(t, expectedPanic, Any, A, Am, e)
+}

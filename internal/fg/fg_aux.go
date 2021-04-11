@@ -62,5 +62,5 @@ func getTDecl(ds []Decl, t Type) TDecl {
 			return td
 		}
 	}
-	panic("Type not found: " + t)
+	panic("Type not found: " + t.String())
 }

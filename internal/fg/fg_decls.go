@@ -21,8 +21,8 @@ func NewFGProgram(ds []Decl, e FGExpr, printf bool) FGProgram {
 	return FGProgram{ds, e, printf}
 }
 
-func NewSTypeLit(t Type, fds []FieldDecl) STypeLit { return STypeLit{t, fds} }
-func NewITypeLit(t Type, ss []Spec) ITypeLit       { return ITypeLit{t, ss} }
+func NewSTypeLit(t TNamed, fds []FieldDecl) STypeLit { return STypeLit{t, fds} }
+func NewITypeLit(t TNamed, ss []Spec) ITypeLit       { return ITypeLit{t, ss} }
 
 // TODO: NewMethDecl
 func NewMDecl(recv ParamDecl, m Name, pds []ParamDecl, t Type, e FGExpr) MethDecl {
@@ -66,9 +66,9 @@ func (p FGProgram) Ok(allowStupid bool) base.Type {
 			tds[t] = d
 		case MethDecl:
 			d.Ok(p.decls)
-			hash := string(d.recv.t) + "." + d.name
+			hash := d.recv.t.String() + "." + d.name
 			if _, ok := mds[hash]; ok {
-				panic("Multiple declarations for receiver " + string(d.recv.t) +
+				panic("Multiple declarations for receiver " + d.recv.t.String() +
 					" of the method name: " + d.name + "\n\t" + d.String())
 			}
 			mds[hash] = d
@@ -115,7 +115,7 @@ func (p FGProgram) String() string {
 /* STypeLit, FieldDecl */
 
 type STypeLit struct {
-	t_S    Type
+	t_S    TNamed
 	fDecls []FieldDecl
 }
 
@@ -136,7 +136,7 @@ func (s STypeLit) Ok(ds []Decl) {
 		}
 		fs[v.name] = v
 		if !isTypeOk(ds, v.t) {
-			panic("Field " + v.name + " has an unknown type: " + string(v.t) +
+			panic("Field " + v.name + " has an unknown type: " + v.t.String() +
 				"\n\t" + s.String())
 		}
 	}
@@ -207,7 +207,7 @@ func (md MethDecl) Ok(ds []Decl) {
 	env := Gamma{md.recv.name: md.recv.t}
 	for _, v := range md.pDecls {
 		if !isTypeOk(ds, v.t) {
-			panic("Parameter " + v.name + " has an unknown type: " + string(v.t) +
+			panic("Parameter " + v.name + " has an unknown type: " + v.t.String() +
 				"\n\t" + md.String())
 		}
 		if _, ok := env[v.name]; ok {
@@ -217,7 +217,7 @@ func (md MethDecl) Ok(ds []Decl) {
 		env[v.name] = v.t
 	}
 	if !isTypeOk(ds, md.t_ret) {
-		panic("Unknown return type: " + string(md.t_ret) + "\n\t" + md.String())
+		panic("Unknown return type: " + md.t_ret.String() + "\n\t" + md.String())
 	}
 	allowStupid := false
 	t := md.e_body.Typing(ds, env, allowStupid)
@@ -269,7 +269,7 @@ func (pd ParamDecl) String() string {
 /* ITypeLit, Sig */
 
 type ITypeLit struct {
-	t_I   Type // Factor out embedded struct with STypeLit?  But constructor will need that struct?
+	t_I   TNamed // Factor out embedded struct with STypeLit?  But constructor will need that struct?
 	specs []Spec
 }
 
@@ -293,7 +293,7 @@ func (c ITypeLit) Ok(ds []Decl) {
 			seen[s.meth] = s
 		case Type:
 			if !isInterfaceType(ds, s) {
-				panic("Embedded type must be an interface, not: " + string(s) +
+				panic("Embedded type must be an interface, not: " + s.String() +
 					"\n\t" + s.String())
 			}
 			if isRecursiveInterfaceEmbedding(ds, make(map[Type]Type), s) {
@@ -337,7 +337,7 @@ func (g0 Sig) Ok(ds []Decl) {
 	seen := make(map[Type]ParamDecl)
 	for _, v := range g0.pDecls {
 		if !isTypeOk(ds, v.t) {
-			panic("Parameter " + v.name + " has an unknown type: " + string(v.t) +
+			panic("Parameter " + v.name + " has an unknown type: " + v.t.String() +
 				"\n\t" + g0.String())
 		}
 		if _, ok := seen[v.t]; ok {
@@ -346,7 +346,7 @@ func (g0 Sig) Ok(ds []Decl) {
 		}
 	}
 	if !isTypeOk(ds, g0.t_ret) {
-		panic("Unknown return type: " + string(g0.t_ret) +
+		panic("Unknown return type: " + g0.t_ret.String() +
 			"\n\t" + g0.String())
 	}
 }
@@ -383,9 +383,15 @@ func (g Sig) String() string {
 
 // N.B. returns bool, not implicit panic like other Ok's
 func isTypeOk(ds []Decl, t Type) bool { // Cf. isStructType, etc.
+
+	// TODO merge these 2 into one
 	if t == STRING_TYPE {
 		return true
 	}
+	if isPrimitiveType(t) {
+		return true
+	}
+
 	for _, v := range ds {
 		if d, ok := v.(STypeLit); ok && d.t_S == t {
 			return true

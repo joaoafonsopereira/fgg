@@ -105,7 +105,7 @@ func (s StructLit) Eval(ds []Decl) (FGExpr, string) {
 
 func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	if !isTypeOk(ds, s.t_S) {
-		panic("Unknown type: " + string(s.t_S) + "\n\t" + s.String())
+		panic("Unknown type: " + s.t_S.String() + "\n\t" + s.String())
 	}
 	fs := fields(ds, s.t_S)
 	if len(s.elems) != len(fs) {
@@ -216,7 +216,7 @@ func (s Select) Eval(ds []Decl) (FGExpr, string) {
 func (s Select) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	t := s.e_S.Typing(ds, gamma, allowStupid)
 	if !isStructType(ds, t) {
-		panic("Illegal select on expr of non-struct type: " + string(t) +
+		panic("Illegal select on expr of non-struct type: " + t.String() +
 			"\n\t" + s.String())
 	}
 	fds := fields(ds, t)
@@ -410,7 +410,7 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 	}
 	t_S := a.e_I.(StructLit).t_S
 	if !isStructType(ds, t_S) {
-		panic("Non struct type found in struct lit: " + t_S)
+		panic("Non struct type found in struct lit: " + t_S.String())
 	}
 	if t_S.Impls(ds, a.t_cast) {
 		return a.e_I, "Assert"
@@ -421,7 +421,7 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	t := a.e_I.Typing(ds, gamma, allowStupid)
 	if !isTypeOk(ds, a.t_cast) {
-		panic("Unknown type: " + string(a.t_cast) + "\n\t" + a.String())
+		panic("Unknown type: " + a.t_cast.String() + "\n\t" + a.String())
 	}
 	if isStructType(ds, t) {
 		if allowStupid {
