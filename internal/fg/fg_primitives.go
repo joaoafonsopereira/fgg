@@ -17,25 +17,34 @@ const (
 	INT64
 )
 
-var precisions = map[int]Tag {
-	8 : INT8,
-	32 : INT32,
-	64 : INT64,
+var precisions = map[int]Tag{
+	8:  INT8,
+	32: INT32,
+	64: INT64,
 }
 
-var NameToTags = map[string]Tag {
-	"int8" : INT8,
-	"int32" : INT32,
-	"int64" : INT64,
+var NamesToTags = map[string]Tag{
+	"int8":  INT8,
+	"int32": INT32,
+	"int64": INT64,
+}
+
+var TagsToNames = map[Tag]string {
+	INT8: "int8",
+	INT32: "int32",
+	INT64: "int64",
 }
 
 /* "Exported" constructors (( ? for fgg (monomorph) ? )) */
 
 func TagFromName(name string) Tag {
-	//tag, ok := NameToTags[name]
-	return NameToTags[name]
+	//tag, ok := NamesToTags[name]
+	return NamesToTags[name]
 }
 
+func NameFromTag(tag Tag) string {
+	return TagsToNames[tag]
+}
 
 func NewIntLit(lit string) PrimitiveLiteral {
 	for prec, tag := range precisions {
@@ -84,13 +93,17 @@ func (b PrimitiveLiteral) CanEval(ds []base.Decl) bool {
 }
 
 func (b PrimitiveLiteral) String() string {
-	//return string(b.payload)
-	panic("implement me PrimitiveLiteral.String")
+	var payload string
+	switch b.payload.(type) {
+	case int64:
+		payload = strconv.FormatInt(b.payload.(int64), 10)
+	default:
+		panic("PrimitiveLiteral.String() for non-int64")
+	}
+	tag := NameFromTag(b.tag)
+	return "PrimitiveLiteral{payload=" + payload + ", tag=" + tag + "}"
 }
-
 
 func (b PrimitiveLiteral) ToGoString(ds []base.Decl) string {
 	panic("implement me PrimitiveLiteral.ToGoString")
 }
-
-
