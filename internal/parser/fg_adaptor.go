@@ -290,9 +290,48 @@ public override void Recover(LexerNoViableAltException e)
 }*/
 
 
-/* Primitive type literals */
+/* Primitive binary operations: #BinaryOp */
+
+const (
+	// arithmetic
+	PLUS = "+"
+	MINUS = "-"
+	// logical
+	AND = "&&"
+	OR  = "||"
+	// relational
+	GT = ">"
+	LT = "<"
+)
+
+func (a *FGAdaptor) ExitBinaryOp(ctx *parser.BinaryOpContext) {
+	r, l := a.pop().(fg.FGExpr), a.pop().(fg.FGExpr)
+	op := ctx.GetOp().GetText()
+	switch op {
+	case PLUS:
+		a.push(fg.NewAdd(l, r))
+	case MINUS:
+		//a.push(fg.NewSub(l,r))
+	case AND:
+	case OR:
+	case GT:
+	case LT:
+	}
+}
+
+/* "primLit": #BoolLit, #IntLit, #FloatLit */
+
+func (a *FGAdaptor) ExitBoolLit(ctx *parser.BoolLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fg.NewBool(lit))
+}
 
 func (a *FGAdaptor) ExitIntLit(ctx *parser.IntLitContext) {
 	lit := ctx.GetLit().GetText()
 	a.push(fg.NewIntLit(lit))
+}
+
+func (a *FGAdaptor) ExitFloatLit(ctx *parser.FloatLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fg.NewFloatLit(lit))
 }

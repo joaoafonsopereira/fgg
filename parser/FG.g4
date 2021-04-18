@@ -21,9 +21,27 @@ PRINTF    : 'Printf' ;
 SPRINTF   : 'Sprintf' ;
 
 // base/primitive types
+TRUE      : 'true' ;
+FALSE     : 'false' ;
+
+BOOL      : 'bool' ;
 INT8      : 'int8' ;
 INT32     : 'int32' ;
 INT64     : 'int64' ;
+FLOAT32   : 'float32' ;
+FLOAT64   : 'float64' ;
+//STRING    : 'string' ;
+
+// arithmetic ops
+PLUS      : '+' ;
+MINUS     : '-' ;
+// logical ops
+AND       : '&&' ;
+OR        : '||' ;
+// relational ops
+GT        : '>' ;
+LT        : '<' ;
+// ...
 
 /* Tokens */
 
@@ -31,13 +49,19 @@ fragment LETTER : ('a' .. 'z') | ('A' .. 'Z') | '\u03b1' | '\u03b2' ;
 fragment DIGIT  : ('0' .. '9') ;
 //fragment HACK   : 'ᐸ' | 'ᐳ' ;  // Doesn't seem to work?
 fragment MONOM_HACK   : '\u1438' | '\u1433' | '\u1428' ;  // Hack for monom output
+fragment DIGITS : DIGIT+ ;
+fragment EXPON  : [eE] [+-]? DIGITS ;
 NAME            : (LETTER | '_' | MONOM_HACK) (LETTER | '_' | DIGIT | MONOM_HACK)* ;
 WHITESPACE      : [ \r\n\t]+ -> skip ;
 COMMENT         : '/*' .*? '*/' -> channel(HIDDEN) ;
 LINE_COMMENT    : '//' ~[\r\n]* -> channel(HIDDEN) ;
 STRING          : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' | ')' | '+' | '-')* '"' ;
 
-INT_LIT         : DIGIT+ ;
+BOOL_LIT        : TRUE | FALSE ;
+INT_LIT         : DIGITS ;
+FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
+                | '.' DIGITS EXPON?
+                ;
 
 
 /* Rules */
@@ -49,12 +73,12 @@ INT_LIT         : DIGIT+ ;
 // "plurals", e.g., decls, used for sequences: comes out as "helper" Contexts,
 // nodes that group up actual children underneath -- makes "adapting" easier.
 
-primitiveType       : INT8 | INT32 | INT64 ;
-//PRIMITIVE_TYPE       : 'int8' | 'int32' | 'int64' ;
-
-//typeName   : name=PRIMITIVE_TYPE                         # TPrimitive
-typeName   : name=primitiveType                          # TPrimitive
-           | name=NAME                                   # TNamed
+primType   : BOOL
+           | INT8 | INT32 | INT64 |
+           | FLOAT32 | FLOAT64
+           ;
+typeName   : name=primType                          # TPrimitive
+           | name=NAME                              # TNamed
            ;
 program    : PACKAGE MAIN ';'
              (IMPORT STRING ';')?
@@ -66,6 +90,7 @@ typeDecl   : TYPE NAME typeLit ;  // TODO: tag id=NAME, better for adapting (vs.
 methDecl   : FUNC '(' paramDecl ')' sig '{' RETURN expr '}' ;
 typeLit    : STRUCT '{' fieldDecls? '}'             # StructTypeLit
            | INTERFACE '{' specs? '}'               # InterfaceTypeLit ;
+//           | primitiveType ; // para type aliases
 fieldDecls : fieldDecl (';' fieldDecl)* ;
 //fieldDecl  : field=NAME typ=NAME ;
 fieldDecl  : field=NAME typeName ;
@@ -84,7 +109,17 @@ expr       : NAME                                   # Variable
            | recv=expr '.' NAME '(' args=exprs? ')' # Call
            | expr '.' '(' typeName ')'              # Assert
            | FMT '.' SPRINTF '(' (STRING | '"%#v"') (',' | expr)* ')'  # Sprintf
-           | lit=INT_LIT                            # IntLit
+           | expr op=(PLUS | MINUS) expr            # BinaryOp
+           | expr op=(GT | LT) expr                 # BinaryOp
+           | expr op=AND expr                       # BinaryOp
+           | expr op=OR expr                        # BinaryOp
+           | '(' expr ')'                           # Paren
+           | primLit                                # PrimaryLit
            ;
 exprs      : expr (',' expr)* ;
+
+primLit    : lit=BOOL_LIT                           # BoolLit
+           | lit=INT_LIT                            # IntLit
+           | lit=FLOAT_LIT                          # FloatLit
+           ; // string, ...
 
