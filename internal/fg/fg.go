@@ -3,17 +3,19 @@ package fg
 import (
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 import "github.com/rhu1/fgg/internal/base"
 
 /* Export */
 
-func NewTPrimitive(t Tag, undefined bool) TPrimitive       { return TPrimitive{t, undefined} }
+func NewTPrimitive(t Tag, undefined bool) TPrimitive { return TPrimitive{t, undefined} }
 
 /* Aliases from base */
 
 type Name = base.Name
+
 type FGNode = base.AstNode
 type Decl = base.Decl
 
@@ -70,11 +72,11 @@ func (t0 TNamed) Impls(ds []Decl, t base.Type) bool {
 
 // t_I is a Spec, but not t_S -- this aspect is currently "dynamically typed"
 // From Spec
-func (t TNamed) GetSigs(ds []Decl) []Sig {
-	if !isInterfaceType(ds, t) { // isStructType would be more efficient
-		panic("Cannot use non-interface type as a Spec: " + t.String())
+func (t0 TNamed) GetSigs(ds []Decl) []Sig {
+	if !isInterfaceType(ds, t0) { // isStructType would be more efficient
+		panic("Cannot use non-interface type as a Spec: " + t0.String())
 	}
-	td := getTDecl(ds, t).(ITypeLit)
+	td := getTDecl(ds, t0).(ITypeLit)
 	var res []Sig
 	for _, s := range td.specs {
 		res = append(res, s.GetSigs(ds)...)
@@ -100,22 +102,30 @@ func (t0 TNamed) String() string {
 /* Primitive types */
 
 type TPrimitive struct {
-	//name      string
 	tag       Tag
 	undefined bool
 }
 
 var _ Type = TPrimitive{}
 
-func (t TPrimitive) isUndefined() bool { return t.undefined }
+func (t0 TPrimitive) Tag() Tag        { return t0.tag }
+func (t0 TPrimitive) Undefined() bool { return t0.undefined }
 
-// Pre: t0.isUndefined() && !t.isUndefined()
-func (t0 TPrimitive) fitsIn(t TPrimitive) bool {
+// Pre: t0.IsUndefined()
+func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
+	if !t0.Undefined() {
+		panic("FitsIn: t0 is not undefined")
+	}
+	if t0.tag > t.tag {
+		return false
+	}
 	switch t0.tag {
-	case INT8, INT32, INT64:
-		return t0.tag <= t.tag && INT8 <= t.tag && t.tag <= INT64 // kind of hardcoded
+	case INT32, INT64:
+		return INT32 <= t.tag && t.tag <= FLOAT64 // kind of hardcoded
+	case FLOAT32, FLOAT64:
+		return FLOAT32 <= t.tag && t.tag <= FLOAT64
 	default:
-		panic("TODO")
+		panic("FitsIn: t0 has unsupported type: " + t0.String())
 	}
 }
 
@@ -126,14 +136,10 @@ func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
 	}
 
 	if t_P, ok := t.(TPrimitive); ok {
-		//if t_P.isUndefined() {
-		//	panic("This should not be possible")
-		//}
-
-		if t0.isUndefined() {
-			return t0.fitsIn(t_P)
+		if t0.Undefined() {
+			return t0.FitsIn(t_P)
 		} else {
-			return t0 == t_P // or .Equals?
+			return t0.Equals(t_P)
 		}
 	} else {
 		// only true if t == Any
@@ -152,13 +158,16 @@ func (t0 TPrimitive) Equals(t base.Type) bool {
 	return t0 == t.(TPrimitive)
 }
 
-func (t TPrimitive) String() string {
-	return "TPrimitive{" +
-		"tag=" + strconv.Itoa(int(t.tag)) +
-		", undefined=" + strconv.FormatBool(t.undefined) +
-	"}"
+func (t0 TPrimitive) String() string {
+	var b strings.Builder
+	b.WriteString("TPrimitive{")
+	b.WriteString("tag=")
+	b.WriteString(NameFromTag(t0.tag))
+	b.WriteString(", undefined=")
+	b.WriteString(strconv.FormatBool(t0.undefined))
+	b.WriteString("}")
+	return b.String()
 }
-
 
 /* AST base intefaces: FGNode, Decl, TDecl, Spec, Expr */
 
