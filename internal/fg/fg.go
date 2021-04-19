@@ -121,7 +121,7 @@ func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
 	}
 	switch t0.tag {
 	case INT32, INT64:
-		return INT32 <= t.tag && t.tag <= FLOAT64 // kind of hardcoded
+		return INT32 <= t.tag && t.tag <= FLOAT64 // kind of ad-hoc
 	case FLOAT32, FLOAT64:
 		return FLOAT32 <= t.tag && t.tag <= FLOAT64
 	default:

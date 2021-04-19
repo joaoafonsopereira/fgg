@@ -186,20 +186,20 @@ func (x Float64Val) ToGoString([]base.Decl) string { return x.String() }
 /* Helpers */
 
 func newIntLit(lit string) (PrimitiveLiteral, bool) {
-	if i, err := strconv.ParseInt(lit, 10, 32); err != nil {
+	if i, err := strconv.ParseInt(lit, 10, 32); err == nil {
 		return PrimitiveLiteral{i, INT32}, true
 	}
-	if i, err := strconv.ParseInt(lit, 10, 64); err != nil {
+	if i, err := strconv.ParseInt(lit, 10, 64); err == nil {
 		return PrimitiveLiteral{i, INT64}, true
 	}
 	return PrimitiveLiteral{}, false
 }
 
 func newFloatLit(lit string) (PrimitiveLiteral, bool) {
-	if f, err := strconv.ParseFloat(lit, 32); err != nil {
+	if f, err := strconv.ParseFloat(lit, 32); err == nil {
 		return PrimitiveLiteral{f, FLOAT32}, true
 	}
-	if f, err := strconv.ParseFloat(lit, 64); err != nil {
+	if f, err := strconv.ParseFloat(lit, 64); err == nil {
 		return PrimitiveLiteral{f, FLOAT64}, true
 	}
 	return PrimitiveLiteral{}, false
@@ -228,42 +228,42 @@ func isNumeric(t TPrimitive) bool {
 
 /* Accessors -- return underlying value of a FGExpr */
 
-func exprToInt32(expr FGExpr) int32 {
+func exprToInt32Val(expr FGExpr) Int32Val {
 	switch e := expr.(type) {
 	case Int32Val:
-		return e.val
+		return e
 	case PrimitiveLiteral:
-		return int32(e.payload.(int64))
+		return Int32Val{int32(e.payload.(int64))}
 	}
 	panic("Expr is not an int32")
 }
 
-func exprToInt64(expr FGExpr) int64 {
+func exprToInt64Val(expr FGExpr) Int64Val {
 	switch e := expr.(type) {
 	case Int64Val:
-		return e.val
+		return e
 	case PrimitiveLiteral:
-		return e.payload.(int64)
+		return Int64Val{e.payload.(int64)}
 	}
 	panic("Expr is not an int64")
 }
 
-func exprToFloat32(expr FGExpr) float32 {
+func exprToFloat32Val(expr FGExpr) Float32Val {
 	switch e := expr.(type) {
 	case Float32Val:
-		return e.val
+		return e
 	case PrimitiveLiteral:
-		return float32(e.payload.(float64))
+		return Float32Val{float32(e.payload.(float64))}
 	}
 	panic("Expr is not a float32")
 }
 
-func exprToFloat64(expr FGExpr) float64 {
+func exprToFloat64Val(expr FGExpr) Float64Val {
 	switch e := expr.(type) {
 	case Float64Val:
-		return e.val
+		return e
 	case PrimitiveLiteral:
-		return e.payload.(float64)
+		return Float64Val{e.payload.(float64)}
 	}
 	panic("Expr is not a float64")
 }
