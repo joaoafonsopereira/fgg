@@ -25,7 +25,6 @@ TRUE      : 'true' ;
 FALSE     : 'false' ;
 
 BOOL      : 'bool' ;
-INT8      : 'int8' ;
 INT32     : 'int32' ;
 INT64     : 'int64' ;
 FLOAT32   : 'float32' ;
@@ -57,7 +56,6 @@ COMMENT         : '/*' .*? '*/' -> channel(HIDDEN) ;
 LINE_COMMENT    : '//' ~[\r\n]* -> channel(HIDDEN) ;
 STRING          : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' | ')' | '+' | '-')* '"' ;
 
-BOOL_LIT        : TRUE | FALSE ;
 INT_LIT         : DIGITS ;
 FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
                 | '.' DIGITS EXPON?
@@ -74,7 +72,7 @@ FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
 // nodes that group up actual children underneath -- makes "adapting" easier.
 
 primType   : BOOL
-           | INT8 | INT32 | INT64 |
+           | INT32 | INT64 |
            | FLOAT32 | FLOAT64
            ;
 typeName   : name=primType                          # TPrimitive
@@ -118,7 +116,7 @@ expr       : NAME                                   # Variable
            ;
 exprs      : expr (',' expr)* ;
 
-primLit    : lit=BOOL_LIT                           # BoolLit
+primLit    : lit=(TRUE|FALSE)                       # BoolLit
            | lit=INT_LIT                            # IntLit
            | lit=FLOAT_LIT                          # FloatLit
            ; // string, ...

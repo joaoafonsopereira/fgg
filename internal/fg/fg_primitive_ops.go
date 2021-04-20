@@ -137,7 +137,7 @@ func anyToFloat64(x interface{}) float64 {
 
 func (a Add) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	lt := a.left.Typing(ds, gamma, allowStupid)
-	rt := a.left.Typing(ds, gamma, allowStupid)
+	rt := a.right.Typing(ds, gamma, allowStupid)
 	if !isPrimitiveType(lt) || !isPrimitiveType(rt) {
 		panic("+: operands are not primitive types")
 	}

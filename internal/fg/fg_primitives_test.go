@@ -32,10 +32,43 @@ func Test019c(t *testing.T) {
 	fgParseAndOkBad(t, expectedPanic, A, Am, e)
 }
 
-// literal doesn't fit in an int8
+// literal doesn't fit in an int32 (and hence doesn't "implement" int32)
 func Test019d(t *testing.T) {
 	A := "type A struct {}"
-	Am := "func (x0 A) id(i int8) int8 { return i }"
-	e := "A{}.id(257)"
+	Am := "func (x0 A) id(i int32) int32 { return i }"
+	e := "A{}.id(2147483648)" // 1 << 31 (math.MaxInt32 + 1)
 	fgParseAndOkBad(t, A, Am, e)
 }
+
+// can't mix different types
+func Test020(t *testing.T) {
+	A := "type A struct {}"
+	Am := "func (x0 A) add(x float32, y float64) float64 { return x+y }"
+	e := "A{}"
+	fgParseAndOkBad(t, A, Am, e)
+	//prog := fgParseAndOkGood(t, A, Am, e)
+	//testutils.EvalAndOkGood(t, prog, 2)
+}
+
+// edge case - number of the form 'x.0' can either be int or float
+func Test021(t *testing.T) {
+	A := "type A struct {}"
+	Am := "func (x0 A) id(i int32) int32 { return i }"
+	e := "A{}.id(1 + 41.0)"
+	fgParseAndOkGood(t, A, Am, e)
+}
+
+func Test021b(t *testing.T) {
+	A := "type A struct {}"
+	Am := "func (x0 A) id(i float32) float32 { return i }"
+	e := "A{}.id(1 + 41.0)"
+	fgParseAndOkGood(t, A, Am, e)
+}
+
+func Test021c(t *testing.T) {
+	A := "type A struct {}"
+	Am := "func (x0 A) id(i int32) int32 { return i }"
+	e := "A{}.id(1 + 41.1)"
+	fgParseAndOkBad(t, A, Am, e)
+}
+

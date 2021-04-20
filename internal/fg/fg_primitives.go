@@ -2,6 +2,7 @@ package fg
 
 import (
 	"github.com/rhu1/fgg/internal/base"
+	"regexp"
 	"strconv"
 )
 
@@ -19,18 +20,27 @@ const (
 )
 
 var NamesToTags = map[string]Tag{
+	"bool": BOOL,
 	"int32": INT32,
 	"int64": INT64,
+	"float32": FLOAT32,
+	"float64": FLOAT64,
 }
 
 var TagsToNames = map[Tag]string{
+	BOOL: "bool",
 	INT32: "int32",
 	INT64: "int64",
+	FLOAT32: "float32",
+	FLOAT64: "float64",
 }
 
 func TagFromName(name string) Tag {
-	//tag, ok := NamesToTags[name]
-	return NamesToTags[name]
+	if tag, ok := NamesToTags[name]; ok {
+		return tag
+	}
+	//return NamesToTags[name]
+	panic("Unknown primitive type")
 }
 
 func NameFromTag(tag Tag) string {
@@ -52,12 +62,18 @@ func NewIntLit(lit string) PrimitiveLiteral {
 	}
 }
 
+
+
 func NewFloatLit(lit string) PrimitiveLiteral {
 	// try to fit literal into an integer first
 	// (int can always be 'converted' back to float)
-	if i, ok := newIntLit(lit); ok {
-		return i // CHECKME(jp): maybe assign tag INT_OR_FLOAT in fgg (for type inference -- e.g. for 13.0, infer int or float?)
-	} else if f, ok := newFloatLit(lit); ok {
+	if hasNoFractionalPart(lit) {
+		truncated := truncateFractionalPart(lit)
+		if i, ok := newIntLit(truncated); ok {
+			return i // CHECKME(jp): maybe assign tag INT_OR_FLOAT in fgg (for type inference -- e.g. for 13.0, infer int or float?)
+		}
+	}
+	if f, ok := newFloatLit(lit); ok {
 		return f
 	} else {
 		panic("Float const too big??")
@@ -203,6 +219,21 @@ func newFloatLit(lit string) (PrimitiveLiteral, bool) {
 		return PrimitiveLiteral{f, FLOAT64}, true
 	}
 	return PrimitiveLiteral{}, false
+}
+
+// checks if the fractional part of the argument only contains zeros
+// TODO should this be moved to the parser/adaptor??
+func hasNoFractionalPart(x string) bool {
+	var zerosFractional = regexp.MustCompile(`^[-+]?\d*\.0*$`)
+	return zerosFractional.FindString(x) != ""
+}
+
+// extracts the leading integer from the fractional number represented by
+// the string x. E.g. truncateFractionalPart("42.0000") == "42"
+// Pre: hasNoFractionalPart(x)
+func truncateFractionalPart(x string) string {
+	var leadingInt = regexp.MustCompile(`^[-+]?\d*`)
+	return leadingInt.FindString(x)
 }
 
 func maxTag(t1, t2 Tag) Tag {
