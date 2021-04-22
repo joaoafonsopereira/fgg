@@ -294,9 +294,8 @@ public override void Recover(LexerNoViableAltException e)
 
 func (a *FGAdaptor) ExitBinaryOp(ctx *parser.BinaryOpContext) {
 	r, l := a.pop().(fg.FGExpr), a.pop().(fg.FGExpr)
-	op := ctx.GetOp().GetText()
+	op := fg.Operator(ctx.GetOp().GetText())
 	a.push(fg.NewBinaryOp(l, r, op))
-
 }
 
 /* "primLit": #BoolLit, #IntLit, #FloatLit */

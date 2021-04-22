@@ -17,6 +17,7 @@ const (
 	INT64
 	FLOAT32
 	FLOAT64
+	STRING
 )
 
 var NamesToTags = map[string]Tag{
@@ -54,7 +55,7 @@ func NewBool(lit string) BoolVal {
 	return BoolVal{b}
 }
 
-func NewIntLit(lit string) PrimitiveLiteral {
+func NewIntLit(lit string) NumericLiteral {
 	if i, ok := newIntLit(lit); ok {
 		return i
 	} else {
@@ -64,7 +65,7 @@ func NewIntLit(lit string) PrimitiveLiteral {
 
 
 
-func NewFloatLit(lit string) PrimitiveLiteral {
+func NewFloatLit(lit string) NumericLiteral {
 	// try to fit literal into an integer first
 	// (int can always be 'converted' back to float)
 	if hasNoFractionalPart(lit) {
@@ -81,41 +82,41 @@ func NewFloatLit(lit string) PrimitiveLiteral {
 }
 
 /******************************************************************************/
-/* PrimitiveLiteral */
+/* NumericLiteral */
 
 // Represents a literal whose type is still undefined (e.g. 123 can either be int32 or int64)
 // Either way, an int/float payload is always saved as an int64/float64;
-type PrimitiveLiteral struct {
+type NumericLiteral struct { // TODO maybe rename to NumericLiteral? payload will always be a number anyway
 	payload interface{}
 	tag     Tag
 }
 
-var _ FGExpr = PrimitiveLiteral{}
+var _ FGExpr = NumericLiteral{}
 
-func (b PrimitiveLiteral) Payload() interface{} { return b.payload }
-func (b PrimitiveLiteral) Tag() Tag             { return b.tag }
+func (b NumericLiteral) Payload() interface{} { return b.payload }
+func (b NumericLiteral) Tag() Tag             { return b.tag }
 
-func (b PrimitiveLiteral) Subs(map[Variable]FGExpr) FGExpr {
+func (b NumericLiteral) Subs(map[Variable]FGExpr) FGExpr {
 	return b
 }
 
-func (b PrimitiveLiteral) Eval([]Decl) (FGExpr, string) {
+func (b NumericLiteral) Eval([]Decl) (FGExpr, string) {
 	panic("Cannot reduce: " + b.String())
 }
 
-func (b PrimitiveLiteral) Typing([]Decl, Gamma, bool) Type {
+func (b NumericLiteral) Typing([]Decl, Gamma, bool) Type {
 	return TPrimitive{tag: b.tag, undefined: true}
 }
 
-func (b PrimitiveLiteral) IsValue() bool {
+func (b NumericLiteral) IsValue() bool {
 	return true
 }
 
-func (b PrimitiveLiteral) CanEval([]base.Decl) bool {
+func (b NumericLiteral) CanEval([]base.Decl) bool {
 	return false
 }
 
-func (b PrimitiveLiteral) String() string {
+func (b NumericLiteral) String() string {
 	var payload string
 	switch p := b.payload.(type) {
 	case int64:
@@ -123,14 +124,14 @@ func (b PrimitiveLiteral) String() string {
 	case float64:
 		payload = strconv.FormatFloat(p, 'E', -1, 64)
 	default:
-		panic("PrimitiveLiteral.String() for unsupported type")
+		panic("NumericLiteral.String() for unsupported type")
 	}
 	tag := NameFromTag(b.tag)
-	return "PrimitiveLiteral{payload=" + payload + ", tag=" + tag + "}"
+	return "NumericLiteral{payload=" + payload + ", tag=" + tag + "}"
 }
 
-func (b PrimitiveLiteral) ToGoString(ds []base.Decl) string {
-	panic("implement me PrimitiveLiteral.ToGoString")
+func (b NumericLiteral) ToGoString(ds []base.Decl) string {
+	panic("implement me NumericLiteral.ToGoString")
 }
 
 /* Values of pre-declared (primitive) types */
@@ -201,24 +202,24 @@ func (x Float64Val) ToGoString([]base.Decl) string { return x.String() }
 
 /* Helpers */
 
-func newIntLit(lit string) (PrimitiveLiteral, bool) {
+func newIntLit(lit string) (NumericLiteral, bool) {
 	if i, err := strconv.ParseInt(lit, 10, 32); err == nil {
-		return PrimitiveLiteral{i, INT32}, true
+		return NumericLiteral{i, INT32}, true
 	}
 	if i, err := strconv.ParseInt(lit, 10, 64); err == nil {
-		return PrimitiveLiteral{i, INT64}, true
+		return NumericLiteral{i, INT64}, true
 	}
-	return PrimitiveLiteral{}, false
+	return NumericLiteral{}, false
 }
 
-func newFloatLit(lit string) (PrimitiveLiteral, bool) {
+func newFloatLit(lit string) (NumericLiteral, bool) {
 	if f, err := strconv.ParseFloat(lit, 32); err == nil {
-		return PrimitiveLiteral{f, FLOAT32}, true
+		return NumericLiteral{f, FLOAT32}, true
 	}
 	if f, err := strconv.ParseFloat(lit, 64); err == nil {
-		return PrimitiveLiteral{f, FLOAT64}, true
+		return NumericLiteral{f, FLOAT64}, true
 	}
-	return PrimitiveLiteral{}, false
+	return NumericLiteral{}, false
 }
 
 // checks if the fractional part of the argument only contains zeros
@@ -243,27 +244,13 @@ func maxTag(t1, t2 Tag) Tag {
 	return t2
 }
 
-/* Predicates */
-
-func isNumeric(t TPrimitive) bool {
-	switch t.Tag() {
-	case INT32, INT64, FLOAT32, FLOAT64:
-		return true
-	}
-	return false
-}
-
-//func isString(t TPrimitive) bool {
-//	return t.Tag() == STRING
-//}
-
 /* Accessors -- return underlying value of a FGExpr */
 
 func exprToInt32Val(expr FGExpr) Int32Val {
 	switch e := expr.(type) {
 	case Int32Val:
 		return e
-	case PrimitiveLiteral:
+	case NumericLiteral:
 		return Int32Val{int32(e.payload.(int64))}
 	}
 	panic("Expr is not an int32")
@@ -273,7 +260,7 @@ func exprToInt64Val(expr FGExpr) Int64Val {
 	switch e := expr.(type) {
 	case Int64Val:
 		return e
-	case PrimitiveLiteral:
+	case NumericLiteral:
 		return Int64Val{e.payload.(int64)}
 	}
 	panic("Expr is not an int64")
@@ -283,7 +270,7 @@ func exprToFloat32Val(expr FGExpr) Float32Val {
 	switch e := expr.(type) {
 	case Float32Val:
 		return e
-	case PrimitiveLiteral:
+	case NumericLiteral:
 		return Float32Val{float32(e.payload.(float64))}
 	}
 	panic("Expr is not a float32")
@@ -293,7 +280,7 @@ func exprToFloat64Val(expr FGExpr) Float64Val {
 	switch e := expr.(type) {
 	case Float64Val:
 		return e
-	case PrimitiveLiteral:
+	case NumericLiteral:
 		return Float64Val{e.payload.(float64)}
 	}
 	panic("Expr is not a float64")
@@ -303,8 +290,41 @@ func exprToFloat64Val(expr FGExpr) Float64Val {
 //	switch e := expr.(type) {
 //	case StringVal:
 //		return e.val
-//	case PrimitiveLiteral:
+//	case NumericLiteral:
 //		return e.payload.(string)
 //	}
 //	panic("Expr is not a string")
 //}
+
+
+/* Predicates */
+
+func isBoolean(t Type) bool {
+	if t_P, ok := t.(TPrimitive); ok {
+		return t_P.Tag() == BOOL
+	}
+	return false
+}
+
+// TODO maybe the predicates could be directly associated with each type, instead
+//  of enumerating all the matching types here
+func isNumeric(t Type) bool {
+	if t_P, ok := t.(TPrimitive); ok {
+		switch t_P.Tag() {
+		case INT32, INT64, FLOAT32, FLOAT64:
+			return true
+		}
+	}
+	return false
+}
+
+func isString(t Type) bool {
+	if t_P, ok := t.(TPrimitive); ok {
+		return t_P.Tag() == STRING
+	}
+	return false
+}
+
+func isComparable(t Type) bool {
+	return true // TODO
+}

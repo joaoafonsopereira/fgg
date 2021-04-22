@@ -1,6 +1,7 @@
 package fg_test
 
 import (
+	"github.com/rhu1/fgg/internal/base/testutils"
 	"testing"
 )
 
@@ -72,3 +73,12 @@ func Test021c(t *testing.T) {
 	fgParseAndOkBad(t, A, Am, e)
 }
 
+// Comparisons and logical ops
+func Test022(t *testing.T) {
+	A := "type A struct {}"
+	Am := "func (x0 A) cmp(x float64, y float64) bool { return x > y || (x < x && false) }"
+	e := "A{}.cmp(2, 4.2)"
+	//fgParseAndOkGood(t, A, Am, e)
+	prog := fgParseAndOkGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 3)
+}
