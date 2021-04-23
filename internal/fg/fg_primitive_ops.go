@@ -359,13 +359,13 @@ func match(x, y FGExpr) (FGExpr, FGExpr) {
 		}
 
 	case Int32Val:
-		return xx, exprToInt32Val(y)
+		return xx, makeInt32Val(y)
 	case Int64Val:
-		return xx, exprToInt64Val(y)
+		return xx, makeInt64Val(y)
 	case Float32Val:
-		return xx, exprToFloat32Val(y)
+		return xx, makeFloat32Val(y)
 	case Float64Val:
-		return xx, exprToFloat64Val(y)
+		return xx, makeFloat64Val(y)
 		//case StringVal:
 		//	result = Float64Val{xx.val + a.right.(Float64Val).val}
 	}

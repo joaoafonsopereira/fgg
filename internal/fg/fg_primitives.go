@@ -4,6 +4,7 @@ import (
 	"github.com/rhu1/fgg/internal/base"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // constants
@@ -63,8 +64,6 @@ func NewIntLit(lit string) NumericLiteral {
 	}
 }
 
-
-
 func NewFloatLit(lit string) NumericLiteral {
 	// try to fit literal into an integer first
 	// (int can always be 'converted' back to float)
@@ -81,12 +80,26 @@ func NewFloatLit(lit string) NumericLiteral {
 	}
 }
 
+func ValueFromLiteral(n NumericLiteral, decldType TPrimitive) FGExpr {
+	switch decldType.Tag() {
+	case INT32:
+		return makeInt32Val(n)
+	case INT64:
+		return makeInt64Val(n)
+	case FLOAT32:
+		return makeFloat32Val(n)
+	case FLOAT64:
+		return makeFloat64Val(n)
+	}
+	panic("Unexpected declared type for " + n.String() + ": " + decldType.String())
+}
+
 /******************************************************************************/
 /* NumericLiteral */
 
 // Represents a literal whose type is still undefined (e.g. 123 can either be int32 or int64)
 // Either way, an int/float payload is always saved as an int64/float64;
-type NumericLiteral struct { // TODO maybe rename to NumericLiteral? payload will always be a number anyway
+type NumericLiteral struct {
 	payload interface{}
 	tag     Tag
 }
@@ -188,11 +201,25 @@ func (x Int64Val) CanEval([]base.Decl) bool   { return false }
 func (x Float32Val) CanEval([]base.Decl) bool { return false }
 func (x Float64Val) CanEval([]base.Decl) bool { return false }
 
-func (x BoolVal) String() string    { return strconv.FormatBool(x.val) }
-func (x Int32Val) String() string   { return strconv.FormatInt(int64(x.val), 10) }
-func (x Int64Val) String() string   { return strconv.FormatInt(x.val, 10) }
-func (x Float32Val) String() string { return strconv.FormatFloat(float64(x.val), 'E', -1, 32) }
-func (x Float64Val) String() string { return strconv.FormatFloat(x.val, 'E', -1, 64) }
+func (x BoolVal) String() string    {
+	return chavetize("BoolVal", strconv.FormatBool(x.val))
+}
+
+func (x Int32Val) String() string   {
+	return chavetize("Int32Val", strconv.FormatInt(int64(x.val), 10))
+}
+
+func (x Int64Val) String() string   {
+	return chavetize("Int64Val", strconv.FormatInt(x.val, 10))
+
+}
+func (x Float32Val) String() string {
+	return chavetize("Float32Val", strconv.FormatFloat(float64(x.val), 'E', -1, 32))
+}
+
+func (x Float64Val) String() string {
+	return chavetize("Float64Val", strconv.FormatFloat(x.val, 'E', -1, 64))
+}
 
 func (x BoolVal) ToGoString([]base.Decl) string    { return x.String() }
 func (x Int32Val) ToGoString([]base.Decl) string   { return x.String() }
@@ -246,7 +273,7 @@ func maxTag(t1, t2 Tag) Tag {
 
 /* Accessors -- return underlying value of a FGExpr */
 
-func exprToInt32Val(expr FGExpr) Int32Val {
+func makeInt32Val(expr FGExpr) Int32Val {
 	switch e := expr.(type) {
 	case Int32Val:
 		return e
@@ -256,7 +283,7 @@ func exprToInt32Val(expr FGExpr) Int32Val {
 	panic("Expr is not an int32")
 }
 
-func exprToInt64Val(expr FGExpr) Int64Val {
+func makeInt64Val(expr FGExpr) Int64Val {
 	switch e := expr.(type) {
 	case Int64Val:
 		return e
@@ -266,7 +293,7 @@ func exprToInt64Val(expr FGExpr) Int64Val {
 	panic("Expr is not an int64")
 }
 
-func exprToFloat32Val(expr FGExpr) Float32Val {
+func makeFloat32Val(expr FGExpr) Float32Val {
 	switch e := expr.(type) {
 	case Float32Val:
 		return e
@@ -276,7 +303,7 @@ func exprToFloat32Val(expr FGExpr) Float32Val {
 	panic("Expr is not a float32")
 }
 
-func exprToFloat64Val(expr FGExpr) Float64Val {
+func makeFloat64Val(expr FGExpr) Float64Val {
 	switch e := expr.(type) {
 	case Float64Val:
 		return e
@@ -327,4 +354,16 @@ func isString(t Type) bool {
 
 func isComparable(t Type) bool {
 	return true // TODO
+}
+
+/* Strings */
+
+// similar to parenthesize but inserts a chaveta
+func chavetize(tname, body string) string {
+	var sb strings.Builder
+	sb.WriteString(tname)
+	sb.WriteString("{ ")
+	sb.WriteString(body)
+	sb.WriteString(" }")
+	return sb.String()
 }
