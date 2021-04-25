@@ -117,8 +117,8 @@ func (b NumericLiteral) Eval([]Decl) (FGExpr, string) {
 	panic("Cannot reduce: " + b.String())
 }
 
-func (b NumericLiteral) Typing([]Decl, Gamma, bool) Type {
-	return TPrimitive{tag: b.tag, undefined: true}
+func (b NumericLiteral) Typing([]Decl, Gamma, bool) (Type, FGExpr) {
+	return TPrimitive{tag: b.tag, undefined: true}, b
 }
 
 func (b NumericLiteral) IsValue() bool {
@@ -183,11 +183,11 @@ func (x Int64Val) Eval([]Decl) (FGExpr, string)   { panic("Cannot reduce: " + x.
 func (x Float32Val) Eval([]Decl) (FGExpr, string) { panic("Cannot reduce: " + x.String()) }
 func (x Float64Val) Eval([]Decl) (FGExpr, string) { panic("Cannot reduce: " + x.String()) }
 
-func (x BoolVal) Typing([]Decl, Gamma, bool) Type    { return TPrimitive{tag: BOOL} }
-func (x Int32Val) Typing([]Decl, Gamma, bool) Type   { return TPrimitive{tag: INT32} }
-func (x Int64Val) Typing([]Decl, Gamma, bool) Type   { return TPrimitive{tag: INT64} }
-func (x Float32Val) Typing([]Decl, Gamma, bool) Type { return TPrimitive{tag: FLOAT32} }
-func (x Float64Val) Typing([]Decl, Gamma, bool) Type { return TPrimitive{tag: FLOAT64} }
+func (x BoolVal) Typing([]Decl, Gamma, bool) (Type, FGExpr)    { return TPrimitive{tag: BOOL}, x }
+func (x Int32Val) Typing([]Decl, Gamma, bool) (Type, FGExpr)   { return TPrimitive{tag: INT32}, x }
+func (x Int64Val) Typing([]Decl, Gamma, bool) (Type, FGExpr)   { return TPrimitive{tag: INT64}, x }
+func (x Float32Val) Typing([]Decl, Gamma, bool) (Type, FGExpr) { return TPrimitive{tag: FLOAT32}, x }
+func (x Float64Val) Typing([]Decl, Gamma, bool) (Type, FGExpr) { return TPrimitive{tag: FLOAT64}, x }
 
 func (x BoolVal) IsValue() bool    { return true }
 func (x Int32Val) IsValue() bool   { return true }

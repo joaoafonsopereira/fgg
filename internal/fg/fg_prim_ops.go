@@ -181,9 +181,9 @@ func (b BinaryOperation) Eval(ds []Decl) (FGExpr, string) {
 		b.left.String() + " " + string(b.op) + " " + b.right.String())
 }
 
-func (b BinaryOperation) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
-	ltype := b.left.Typing(ds, gamma, allowStupid)
-	rtype := b.right.Typing(ds, gamma, allowStupid)
+func (b BinaryOperation) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	ltype, ltree := b.left.Typing(ds, gamma, allowStupid)
+	rtype, rtree := b.right.Typing(ds, gamma, allowStupid)
 
 	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
 	// any of the Impls tests below
@@ -205,13 +205,15 @@ func (b BinaryOperation) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 		}
 	}
 
+	newTree := NewBinaryOp(ltree, rtree, b.op)
+
 	// verify that ltype and rtype are compatible;
 	// if they are, return the most general type
 	if ltype.Impls(ds, rtype) {
-		return rtype
+		return rtype, newTree
 	}
 	if rtype.Impls(ds, ltype) {
-		return ltype
+		return ltype, newTree
 	}
 	panic("mismatched types " + ltype.String() + " and " + rtype.String())
 
@@ -308,9 +310,9 @@ func (c Comparison) Eval(ds []Decl) (FGExpr, string) {
 		c.left.String() + " " + string(c.op) + " " + c.right.String())
 }
 
-func (c Comparison) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
-	ltype := c.left.Typing(ds, gamma, allowStupid)
-	rtype := c.right.Typing(ds, gamma, allowStupid)
+func (c Comparison) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	ltype, ltree := c.left.Typing(ds, gamma, allowStupid)
+	rtype, rtree := c.right.Typing(ds, gamma, allowStupid)
 
 	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
 	// the Impls tests below
@@ -321,7 +323,7 @@ func (c Comparison) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())
 	}
 
-	return TPrimitive{tag:BOOL}
+	return TPrimitive{tag:BOOL}, NewBinaryOp(ltree, rtree, c.op)
 }
 
 
