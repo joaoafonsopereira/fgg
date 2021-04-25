@@ -353,7 +353,9 @@ func isString(t Type) bool {
 }
 
 func isComparable(t Type) bool {
-	return true // TODO
+	// TODO
+	_, ok := t.(TPrimitive)
+	return ok
 }
 
 /* Strings */

@@ -73,6 +73,9 @@ func Test021c(t *testing.T) {
 	fgParseAndOkBad(t, A, Am, e)
 }
 
+
+// TODO why is this test failing??
+
 // Comparisons and logical ops
 func Test022(t *testing.T) {
 	A := "type A struct {}"
@@ -83,6 +86,12 @@ func Test022(t *testing.T) {
 	testutils.EvalAndOkGood(t, prog, 3)
 }
 
+
+
+
+// TODO: conversion NumericLiteral -> [Int|Float][32|64]Val
+
+// test overflow
 func Test023(t *testing.T) {
 	A := "type A struct {}"
 	Am := "func (x0 A) add(x int32, y int32) int32 { return x+y }"

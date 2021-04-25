@@ -21,9 +21,6 @@ PRINTF    : 'Printf' ;
 SPRINTF   : 'Sprintf' ;
 
 // base/primitive types
-TRUE      : 'true' ;
-FALSE     : 'false' ;
-
 BOOL      : 'bool' ;
 INT32     : 'int32' ;
 INT64     : 'int64' ;
@@ -48,14 +45,15 @@ fragment LETTER : ('a' .. 'z') | ('A' .. 'Z') | '\u03b1' | '\u03b2' ;
 fragment DIGIT  : ('0' .. '9') ;
 //fragment HACK   : 'ᐸ' | 'ᐳ' ;  // Doesn't seem to work?
 fragment MONOM_HACK   : '\u1438' | '\u1433' | '\u1428' ;  // Hack for monom output
-fragment DIGITS : DIGIT+ ;
-fragment EXPON  : [eE] [+-]? DIGITS ;
 NAME            : (LETTER | '_' | MONOM_HACK) (LETTER | '_' | DIGIT | MONOM_HACK)* ;
 WHITESPACE      : [ \r\n\t]+ -> skip ;
 COMMENT         : '/*' .*? '*/' -> channel(HIDDEN) ;
 LINE_COMMENT    : '//' ~[\r\n]* -> channel(HIDDEN) ;
 STRING          : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' | ')' | '+' | '-')* '"' ;
 
+fragment DIGITS : DIGIT+ ;
+fragment EXPON  : [eE] [+-]? DIGITS ;
+BOOL_LIT        : 'true' | 'false' ;
 INT_LIT         : DIGITS ;
 FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
                 | '.' DIGITS EXPON?
@@ -72,7 +70,7 @@ FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
 // nodes that group up actual children underneath -- makes "adapting" easier.
 
 primType   : BOOL
-           | INT32 | INT64 |
+           | INT32 | INT64
            | FLOAT32 | FLOAT64
            ;
 typeName   : name=primType                          # TPrimitive
@@ -116,7 +114,7 @@ expr       : NAME                                   # Variable
            ;
 exprs      : expr (',' expr)* ;
 
-primLit    : lit=(TRUE|FALSE)                       # BoolLit
+primLit    : lit=BOOL_LIT                           # BoolLit
            | lit=INT_LIT                            # IntLit
            | lit=FLOAT_LIT                          # FloatLit
            ; // string, ...
