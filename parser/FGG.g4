@@ -16,6 +16,25 @@ FMT: 'fmt';
 PRINTF: 'Printf';
 SPRINTF: 'Sprintf';
 
+// base/primitive types
+BOOL      : 'bool' ;
+INT32     : 'int32' ;
+INT64     : 'int64' ;
+FLOAT32   : 'float32' ;
+FLOAT64   : 'float64' ;
+//STRING    : 'string' ;
+
+// arithmetic ops
+PLUS      : '+' ;
+MINUS     : '-' ;
+// logical ops
+AND       : '&&' ;
+OR        : '||' ;
+// relational ops
+GT        : '>' ;
+LT        : '<' ;
+// ...
+
 /* Tokens */
 
 fragment LETTER: ('a' .. 'z')
@@ -43,6 +62,14 @@ STRING:
 		| '-'
 	)* '"';
 
+fragment DIGITS : DIGIT+ ;
+fragment EXPON  : [eE] [+-]? DIGITS ;
+BOOL_LIT        : 'true' | 'false' ;
+INT_LIT         : DIGITS ;
+FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
+                | '.' DIGITS EXPON?
+                ;
+
 /* Rules */
 
 // Conventions: "tag=" to distinguish repeat productions within a rule: comes out in field/getter
@@ -50,8 +77,15 @@ STRING:
 // decls, used for sequences: comes out as "helper" Contexts, nodes that group up actual children
 // underneath -- makes "adapting" easier.
 
-typ: NAME # TypeParam | NAME '(' typs? ')' # TypeName;
-typs: typ (',' typ)*;
+typ        : NAME               # TypeParam
+           | NAME '(' typs? ')' # TypeName
+           | name=primType      # TPrimitive
+           ;
+typs       : typ (',' typ)*;
+primType   : BOOL
+           | INT32 | INT64
+           | FLOAT32 | FLOAT64
+           ;
 typeFormals:
 	'(' TYPE typeFDecls? ')'; // Refactored "(...)" into here
 typeFDecls: typeFDecl (',' typeFDecl)*;
@@ -84,6 +118,16 @@ expr:
 	| expr '.' NAME														# Select
 	| recv = expr '.' NAME '(' targs = typs? ')' '(' args = exprs? ')'	# Call
 	| expr '.' '(' typ ')'												# Assert
-	| FMT '.' SPRINTF '(' (STRING | '"%#v"') (',' | expr)* ')'			# Sprintf;
+	| FMT '.' SPRINTF '(' (STRING | '"%#v"') (',' | expr)* ')'			# Sprintf
+	| expr op=(PLUS | MINUS) expr                                       # BinaryOp
+	| expr op=(GT | LT) expr                                            # BinaryOp
+	| expr op=AND expr                                                  # BinaryOp
+	| expr op=OR expr                                                   # BinaryOp
+	| '(' expr ')'                                                      # Paren
+	| primLit                                                           # PrimaryLit
+	;
 exprs: expr (',' expr)*;
-
+primLit    : lit=BOOL_LIT                           # BoolLit
+           | lit=INT_LIT                            # IntLit
+           | lit=FLOAT_LIT                          # FloatLit
+           ; // string, ...

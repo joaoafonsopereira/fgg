@@ -15,11 +15,12 @@ var _ = strconv.AppendBool
 
 /* Export */
 
-func NewTName(t Name, us []Type) TNamed        { return TNamed{t, us} }
-func IsStructType(ds []Decl, u Type) bool      { return isStructType(ds, u) }
-func IsNamedIfaceType(ds []Decl, u Type) bool  { return isNamedIfaceType(ds, u) }
-func NewTFormal(name TParam, u_I Type) TFormal { return TFormal{name, u_I} }
-func NewBigPsi(tFormals []TFormal) BigPsi      { return BigPsi{tFormals} }
+func NewTName(t Name, us []Type) TNamed          { return TNamed{t, us} }
+func IsStructType(ds []Decl, u Type) bool        { return isStructType(ds, u) }
+func IsNamedIfaceType(ds []Decl, u Type) bool    { return isNamedIfaceType(ds, u) }
+func NewTFormal(name TParam, u_I Type) TFormal   { return TFormal{name, u_I} }
+func NewBigPsi(tFormals []TFormal) BigPsi        { return BigPsi{tFormals} }
+func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
 
 /* Constants */
 
@@ -119,7 +120,7 @@ func (a TParam) Impls(ds []Decl, u base.Type) bool {
 }
 
 func (a TParam) Ok(ds []Decl, delta Delta) {
-	if _, ok := PRIMITIVE_TYPES[a]; ok {
+	if _, ok := PRIMITIVE_TYPES[a]; ok { // TODO remove this check as it is only necessary with the string "hack"
 		return
 	}
 	if _, ok := delta[a]; !ok {
@@ -338,6 +339,104 @@ func (u TNamed) ToGoString(ds []Decl) string {
 	writeToGoTypes(ds, &b, u.u_args)
 	b.WriteString(")")
 	return b.String()
+}
+
+/* Primitive types */
+type TPrimitive struct {
+	tag       Tag
+	undefined bool
+}
+
+var _ Type = TPrimitive{}
+
+func (t TPrimitive) Tag() Tag        { return t.tag }
+func (t TPrimitive) Undefined() bool { return t.undefined }
+
+func (t TPrimitive) TSubs(subs map[TParam]Type) Type {
+	return t
+}
+
+func (t TPrimitive) SubsEta(eta Eta) TNamed {
+	//TODO how to overcome the fact that this returns a TNamed
+	panic("TPrimitive.SubsEta") // not relevant until mono phase
+}
+
+func (t TPrimitive) SubsEtaOpen(eta EtaOpen) Type {
+	return t
+}
+
+// Pre: t0.IsUndefined()
+func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
+	if !t0.Undefined() {
+		panic("FitsIn: t0 is not undefined")
+	}
+	if t0.tag > t.tag {
+		return false
+	}
+	switch t0.tag {
+	case INT32, INT64:
+		return INT32 <= t.tag && t.tag <= FLOAT64 // kind of ad-hoc
+	case FLOAT32, FLOAT64:
+		return FLOAT32 <= t.tag && t.tag <= FLOAT64
+	default:
+		panic("FitsIn: t0 has unsupported type: " + t0.String())
+	}
+}
+
+func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
+	if _, ok := u.(Type); !ok {
+		panic("Expected FGR type, not " + reflect.TypeOf(u).String() +
+			":\n\t" + u.String())
+	}
+
+	if t_P, ok := u.(TPrimitive); ok {
+		if t0.Undefined() {
+			return t0.FitsIn(t_P)
+		} else {
+			return t0.Equals(t_P)
+		}
+	} else {
+		// only true if t == Any
+		return isNamedIfaceType(ds, u) && len(methods(ds, u)) == 0
+	}
+}
+
+func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
+	if _, ok := t.(Type); !ok {
+		panic("Expected FGG type, not " + reflect.TypeOf(t).String() +
+			":\n\t" + t.String())
+	}
+	return t0.ImplsDelta(ds, make(Delta), t.(Type))
+}
+
+func (t TPrimitive) Ok(ds []Decl, delta Delta) {
+	// do nothing -- a primitive type is always Ok (?)
+}
+
+func (t0 TPrimitive) Equals(t base.Type) bool {
+	if _, ok := t.(Type); !ok {
+		panic("Expected FGG type, not " + reflect.TypeOf(t).String() +
+			":\n\t" + t.String())
+	}
+	if _, ok := t.(TPrimitive); !ok {
+		return false
+	}
+	return t0 == t.(TPrimitive)
+}
+
+func (t TPrimitive) String() string {
+	var b strings.Builder
+	b.WriteString("TPrimitive{")
+	b.WriteString("tag=")
+	b.WriteString(NameFromTag(t.tag))
+	b.WriteString(", undefined=")
+	b.WriteString(strconv.FormatBool(t.undefined))
+	b.WriteString("}")
+	return b.String()
+}
+
+func (t TPrimitive) ToGoString(ds []Decl) string {
+	panic("implement me")
 }
 
 /* Type formals and actuals */

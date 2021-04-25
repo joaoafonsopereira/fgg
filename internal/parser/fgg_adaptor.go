@@ -61,7 +61,7 @@ func (a *FGGAdaptor) Parse(strictParse bool, input string) base.Program {
 	return a.pop().(fgg.FGGProgram)
 }
 
-/* #Typeparam ("typ"), #TypeName ("typ"), "typeFormals", "typeFDecls", "typeFDecl" */
+/* #Typeparam ("typ"), #TypeName ("typ"), #TPrimitive ("typ"), "typeFormals", "typeFDecls", "typeFDecl" */
 
 func (a *FGGAdaptor) ExitTypeParam(ctx *parser.TypeParamContext) {
 	b := fgg.TParam(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
@@ -80,6 +80,11 @@ func (a *FGGAdaptor) ExitTypeName(ctx *parser.TypeNameContext) {
 	}
 
 	a.push(fgg.NewTName(t, us))
+}
+
+func (a *FGGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
+	tag := fgg.TagFromName(ctx.GetName().GetText())
+	a.push(fgg.NewTPrimitive(tag, false))
 }
 
 func (a *FGGAdaptor) ExitTypeFormals(ctx *parser.TypeFormalsContext) {
@@ -332,4 +337,29 @@ func (b *FGGBailLexer) Recover(re antlr.RecognitionException) {
 	message := "lex error after token " + re.GetOffendingToken().GetText() +
 		" at position " + strconv.Itoa(re.GetOffendingToken().GetStart())
 	panic(message)
+}
+
+/* Primitive binary operations: #BinaryOp */
+
+func (a *FGGAdaptor) ExitBinaryOp(ctx *parser.BinaryOpContext) {
+	r, l := a.pop().(fgg.FGGExpr), a.pop().(fgg.FGGExpr)
+	op := fgg.Operator(ctx.GetOp().GetText())
+	a.push(fgg.NewBinaryOp(l, r, op))
+}
+
+/* "primLit": #BoolLit, #IntLit, #FloatLit */
+
+func (a *FGGAdaptor) ExitBoolLit(ctx *parser.BoolLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fgg.NewBool(lit))
+}
+
+func (a *FGGAdaptor) ExitIntLit(ctx *parser.IntLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fgg.NewIntLit(lit))
+}
+
+func (a *FGGAdaptor) ExitFloatLit(ctx *parser.FloatLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fgg.NewFloatLit(lit))
 }
