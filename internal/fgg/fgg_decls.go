@@ -72,7 +72,7 @@ func (p FGGProgram) GetDecls() []Decl   { return p.decls } // Return a copy?
 func (p FGGProgram) GetMain() base.Expr { return p.e_main }
 func (p FGGProgram) IsPrintf() bool     { return p.printf } // HACK
 
-func (p FGGProgram) Ok(allowStupid bool) base.Type {
+func (p FGGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
 	tds := make(map[string]TypeDecl) // Type name
 	mds := make(map[string]MethDecl) // Hack, string = md.recv.t + "." + md.name
 	for _, v := range p.decls {
@@ -101,7 +101,8 @@ func (p FGGProgram) Ok(allowStupid bool) base.Type {
 	// Empty envs for main
 	var delta Delta
 	var gamma Gamma
-	return p.e_main.Typing(p.decls, delta, gamma, allowStupid)
+	typ, ast := p.e_main.Typing(p.decls, delta, gamma, allowStupid)
+	return typ, FGGProgram{p.decls, ast, p.printf}
 }
 
 func (p FGGProgram) Eval() (base.Program, string) {
@@ -267,7 +268,8 @@ func (md MethDecl) Ok(ds []Decl) {
 	}
 	md.u_ret.Ok(ds, delta)
 	allowStupid := false
-	u := md.e_body.Typing(ds, delta, gamma, allowStupid)
+	// don't care about 'ast' returned from typing of method body -- only from method Call
+	u, _ := md.e_body.Typing(ds, delta, gamma, allowStupid)
 
 	/*fmt.Println("a:", u)
 	fmt.Println("b:", md.u_ret)

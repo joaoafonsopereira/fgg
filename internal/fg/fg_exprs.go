@@ -40,12 +40,12 @@ func (x Variable) Eval(ds []Decl) (FGExpr, string) {
 	panic("Cannot evaluate free variable: " + x.name)
 }
 
-func (x Variable) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
+func (x Variable) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 	res, ok := gamma[x.name]
 	if !ok {
 		panic("Var not in env: " + x.String())
 	}
-	return res
+	return res, x
 }
 
 func (x Variable) IsValue() bool {
@@ -103,7 +103,7 @@ func (s StructLit) Eval(ds []Decl) (FGExpr, string) {
 	}
 }
 
-func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
+func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 	if !isTypeOk(ds, s.t_S) {
 		panic("Unknown type: " + s.t_S.String() + "\n\t" + s.String())
 	}
@@ -118,15 +118,25 @@ func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 		b.WriteString(s.String())
 		panic(b.String())
 	}
+	elems := make([]FGExpr, len(s.elems))
 	for i, v := range s.elems {
-		t := v.Typing(ds, gamma, allowStupid)
+		t, newSubtree := v.Typing(ds, gamma, allowStupid)
 		u := fs[i].t
 		if !t.Impls(ds, u) {
 			panic("Arg expr must implement field type: arg=" + t.String() +
 				", field=" + u.String() + "\n\t" + s.String())
 		}
+
+		elems[i] = newSubtree
+		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// corresponding to a value of the expected type (u)
+		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
+			if u_P, ok := u.(TPrimitive); ok {
+				elems[i] = ValueFromLiteral(newSubtree, u_P)
+			}
+		}
 	}
-	return s.t_S
+	return s.t_S, StructLit{s.t_S, elems}
 }
 
 // From base.Expr
@@ -213,8 +223,8 @@ func (s Select) Eval(ds []Decl) (FGExpr, string) {
 	panic("Field not found: " + s.field + "\n\t" + s.String())
 }
 
-func (s Select) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
-	t := s.e_S.Typing(ds, gamma, allowStupid)
+func (s Select) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	t, e_S := s.e_S.Typing(ds, gamma, allowStupid)
 	if !isStructType(ds, t) {
 		panic("Illegal select on expr of non-struct type: " + t.String() +
 			"\n\t" + s.String())
@@ -222,7 +232,7 @@ func (s Select) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	fds := fields(ds, t)
 	for _, v := range fds {
 		if v.name == s.field {
-			return v.t
+			return v.t, Select{e_S, s.field}
 		}
 	}
 	panic("Field " + s.field + " not found in type: " + t.String() +
@@ -309,8 +319,8 @@ func (c Call) Eval(ds []Decl) (FGExpr, string) {
 	return e.Subs(subs), "Call" // N.B. single combined substitution map slightly different to R-Call
 }
 
-func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
-	t0 := c.e_recv.Typing(ds, gamma, allowStupid)
+func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	t0, e_recv := c.e_recv.Typing(ds, gamma, allowStupid)
 	var g Sig
 	if tmp, ok := methods(ds, t0)[c.meth]; !ok { // !!! submission version had "methods(m)"
 		panic("Method not found: " + c.meth + " in " + t0.String() + "\n\t" + c.String())
@@ -327,14 +337,25 @@ func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 		b.WriteString(c.String())
 		panic(b.String())
 	}
+	args := make([]FGExpr, len(c.args))
 	for i, a := range c.args {
-		t := a.Typing(ds, gamma, allowStupid)
-		if !t.Impls(ds, g.pDecls[i].t) {
+		t, newSubtree := a.Typing(ds, gamma, allowStupid)
+		u := g.pDecls[i].t
+		if !t.Impls(ds, u) {
 			panic("Arg expr type must implement param type: arg=" + t.String() +
 				", param=" + g.pDecls[i].t.String() + "\n\t" + c.String())
 		}
+
+		args[i] = newSubtree
+		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// corresponding to a value of the expected type (u)
+		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
+			if u_P, ok := u.(TPrimitive); ok {
+				args[i] = ValueFromLiteral(newSubtree, u_P)
+			}
+		}
 	}
-	return g.t_ret
+	return g.t_ret, Call{e_recv, c.meth, args}
 }
 
 // From base.Expr
@@ -418,14 +439,15 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 	panic("Cannot reduce: " + a.String())
 }
 
-func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
-	t := a.e_I.Typing(ds, gamma, allowStupid)
+func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	t, e_I := a.e_I.Typing(ds, gamma, allowStupid)
+	newAst := Assert{e_I, a.t_cast}
 	if !isTypeOk(ds, a.t_cast) {
 		panic("Unknown type: " + a.t_cast.String() + "\n\t" + a.String())
 	}
 	if isStructType(ds, t) {
 		if allowStupid {
-			return a.t_cast
+			return a.t_cast, newAst
 		} else {
 			panic("Expr must be an interface type (in a non-stupid context): found " +
 				t.String() + " for\n\t" + a.String())
@@ -433,11 +455,11 @@ func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	}
 	// t is an interface type
 	if isInterfaceType(ds, a.t_cast) {
-		return a.t_cast // No further checks -- N.B., Robert said they are looking to refine this
+		return a.t_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
 	}
 	// a.t is a struct type
 	if a.t_cast.Impls(ds, t) {
-		return a.t_cast
+		return a.t_cast, newAst
 	}
 	panic("Struct type assertion must implement expr type: asserted=" +
 		a.t_cast.String() + ", expr=" + t.String())
@@ -493,8 +515,8 @@ func (s StringLit) Eval(ds []Decl) (FGExpr, string) {
 	panic("Cannot reduce: " + s.String())
 }
 
-func (s StringLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
-	return STRING_TYPE
+func (s StringLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	return STRING_TYPE, s
 }
 
 // From base.Expr
@@ -560,11 +582,12 @@ func (s Sprintf) Eval(ds []Decl) (FGExpr, string) {
 }
 
 // TODO: [Warning] not "fully" type checked, cf. MISSING/EXTRA
-func (s Sprintf) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
+func (s Sprintf) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	args := make([]FGExpr, len(s.args))
 	for i := 0; i < len(s.args); i++ {
-		s.args[i].Typing(ds, gamma, allowStupid)
+		_, args[i] = s.args[i].Typing(ds, gamma, allowStupid)
 	}
-	return STRING_TYPE
+	return STRING_TYPE, Sprintf{s.format, args}
 }
 
 // From base.Expr

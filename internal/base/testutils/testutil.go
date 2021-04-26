@@ -15,7 +15,7 @@ const PARSER_PANIC_PREFIX = "[Parser] "
 func parseAndCheckOk(a base.Adaptor, src string) base.Program {
 	ast := a.Parse(true, src)
 	allowStupid := false
-	ast.Ok(allowStupid)
+	_, ast = ast.Ok(allowStupid)
 	return ast
 }
 

@@ -50,7 +50,7 @@ func (p FGProgram) GetMain() base.Expr { return p.e_main }
 func (p FGProgram) IsPrintf() bool     { return p.printf } // HACK
 
 // From base.Program
-func (p FGProgram) Ok(allowStupid bool) base.Type {
+func (p FGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
 	tds := make(map[string]TDecl)    // Type name
 	mds := make(map[string]MethDecl) // Hack, string = string(md.recv.t) + "." + md.name
 	for _, v := range p.decls {
@@ -78,7 +78,8 @@ func (p FGProgram) Ok(allowStupid bool) base.Type {
 		}
 	}
 	var gamma Gamma // Empty env for main
-	return p.e_main.Typing(p.decls, gamma, allowStupid)
+	typ, ast := p.e_main.Typing(p.decls, gamma, allowStupid)
+	return typ, FGProgram{p.decls, ast, p.printf}
 }
 
 // CHECKME: resulting FGProgram is not parsed from source, OK? -- cf. Expr.Eval
@@ -220,7 +221,8 @@ func (md MethDecl) Ok(ds []Decl) {
 		panic("Unknown return type: " + md.t_ret.String() + "\n\t" + md.String())
 	}
 	allowStupid := false
-	t := md.e_body.Typing(ds, env, allowStupid)
+	// don't care about 'ast' returned from typing of method body -- only from method Call
+	t, _ := md.e_body.Typing(ds, env, allowStupid)
 	if !t.Impls(ds, md.t_ret) {
 		panic("Method body type must implement declared return type: found=" +
 			t.String() + ", expected=" + md.t_ret.String() + "\n\t" + md.String())

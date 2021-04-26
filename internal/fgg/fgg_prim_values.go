@@ -193,11 +193,11 @@ func (x Int64Val) Eval([]Decl) (FGGExpr, string)   { panic("Cannot reduce: " + x
 func (x Float32Val) Eval([]Decl) (FGGExpr, string) { panic("Cannot reduce: " + x.String()) }
 func (x Float64Val) Eval([]Decl) (FGGExpr, string) { panic("Cannot reduce: " + x.String()) }
 
-func (x BoolVal) Typing([]Decl, Delta, Gamma, bool) Type    { return TPrimitive{tag: BOOL} }
-func (x Int32Val) Typing([]Decl, Delta, Gamma, bool) Type   { return TPrimitive{tag: INT32} }
-func (x Int64Val) Typing([]Decl, Delta, Gamma, bool) Type   { return TPrimitive{tag: INT64} }
-func (x Float32Val) Typing([]Decl, Delta, Gamma, bool) Type { return TPrimitive{tag: FLOAT32} }
-func (x Float64Val) Typing([]Decl, Delta, Gamma, bool) Type { return TPrimitive{tag: FLOAT64} }
+func (x BoolVal) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)    { return TPrimitive{tag: BOOL}, x }
+func (x Int32Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)   { return TPrimitive{tag: INT32}, x }
+func (x Int64Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)   { return TPrimitive{tag: INT64}, x }
+func (x Float32Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) { return TPrimitive{tag: FLOAT32}, x }
+func (x Float64Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) { return TPrimitive{tag: FLOAT64}, x }
 
 func (x BoolVal) IsValue() bool    { return true }
 func (x Int32Val) IsValue() bool   { return true }
@@ -308,7 +308,12 @@ func makeFloat32Val(expr FGGExpr) Float32Val {
 	case Float32Val:
 		return e
 	case NumericLiteral:
-		return Float32Val{float32(e.payload.(float64))}
+		switch p := e.payload.(type) {
+		case int64:
+			return Float32Val{float32(p)}
+		case float64:
+			return Float32Val{float32(p)}
+		}
 	}
 	panic("Expr is not a float32")
 }
@@ -318,7 +323,12 @@ func makeFloat64Val(expr FGGExpr) Float64Val {
 	case Float64Val:
 		return e
 	case NumericLiteral:
-		return Float64Val{e.payload.(float64)}
+		switch p := e.payload.(type) {
+		case int64:
+			return Float64Val{float64(p)}
+		case float64:
+			return Float64Val{p}
+		}
 	}
 	panic("Expr is not a float64")
 }

@@ -626,7 +626,7 @@ type FGGExpr interface {
 	Subs(subs map[Variable]FGGExpr) FGGExpr
 	TSubs(subs map[TParam]Type) FGGExpr
 	// gamma and delta should be treated immutably
-	Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type
+	Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr)
 	Eval(ds []Decl) (FGGExpr, string)
 }
 

@@ -298,7 +298,12 @@ func makeFloat32Val(expr FGExpr) Float32Val {
 	case Float32Val:
 		return e
 	case NumericLiteral:
-		return Float32Val{float32(e.payload.(float64))}
+		switch p := e.payload.(type) {
+		case int64:
+			return Float32Val{float32(p)}
+		case float64:
+			return Float32Val{float32(p)}
+		}
 	}
 	panic("Expr is not a float32")
 }
@@ -308,7 +313,12 @@ func makeFloat64Val(expr FGExpr) Float64Val {
 	case Float64Val:
 		return e
 	case NumericLiteral:
-		return Float64Val{e.payload.(float64)}
+		switch p := e.payload.(type) {
+		case int64:
+			return Float64Val{float64(p)}
+		case float64:
+			return Float64Val{p}
+		}
 	}
 	panic("Expr is not a float64")
 }
@@ -360,7 +370,7 @@ func isComparable(t Type) bool {
 
 /* Strings */
 
-// similar to parenthesize but inserts a chaveta
+// similar to parenthesize but inserts chavetas
 func chavetize(tname, body string) string {
 	var sb strings.Builder
 	sb.WriteString(tname)

@@ -190,7 +190,8 @@ type FGExpr interface {
 
 	// N.B. gamma should be treated immutably (and ds, of course)
 	// (No typing rule modifies gamma, except the T-Func bootstrap)
-	Typing(ds []Decl, gamma Gamma, allowStupid bool) Type
+	Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr)
+	//Typing(ds []Decl, gamma Gamma, allowStupid bool) Type
 
 	// string is the type name of the "actually evaluated" expr (within the eval context)
 	// CHECKME: resulting Exprs are not "parsed" from source, OK?

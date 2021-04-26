@@ -74,11 +74,6 @@ func Test021c(t *testing.T) {
 	fggParseAndOkBad(t, A, Am, e)
 }
 
-
-
-// TODO conversions NumericLiteral -> ...Val
-
-
 // Comparisons and logical ops
 func Test022(t *testing.T) {
 	A := "type A(type ) struct {}"
@@ -93,16 +88,16 @@ func Test023(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) add(type )(x int32, y int32) int32 { return x+y }"
 	e := "A(){}.add()(2147483647, 1)"
-	//fgParseAndOkGood(t, A, Am, e)
-	prog := fggParseAndOkGood(t, A, Am, e)
-	testutils.EvalAndOkGood(t, prog, 3)
+	fggParseAndOkGood(t, A, Am, e)
+	//prog := fggParseAndOkGood(t, A, Am, e)
+	//testutils.EvalAndOkGood(t, prog, 3)
 }
 
 func Test023b(t *testing.T) {
 	A := "type A(type ) struct {x int32}"
 	Am := "func (x0 A(type )) add1(type )() int32 { return x0.x + 1 }"
 	e := "A(){2147483647}.add1()()"
-	//fgParseAndOkGood(t, A, Am, e)
-	prog := fggParseAndOkGood(t, A, Am, e)
-	testutils.EvalAndOkGood(t, prog, 4)
+	fggParseAndOkGood(t, A, Am, e)
+	//prog := fggParseAndOkGood(t, A, Am, e)
+	//testutils.EvalAndOkGood(t, prog, 4)
 }

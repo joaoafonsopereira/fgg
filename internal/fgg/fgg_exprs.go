@@ -53,12 +53,12 @@ func (x Variable) Eval(ds []Decl) (FGGExpr, string) {
 
 // TODO: refactor as Typing and StupidTyping? (clearer than bool param)
 func (x Variable) Typing(ds []Decl, delta Delta, gamma Gamma,
-	allowStupid bool) Type {
+	allowStupid bool) (Type, FGGExpr) {
 	res, ok := gamma[x.name]
 	if !ok {
 		panic("Var not in env: " + x.String())
 	}
-	return res
+	return res, x
 }
 
 // From base.Expr
@@ -126,7 +126,7 @@ func (s StructLit) Eval(ds []Decl) (FGGExpr, string) {
 }
 
 func (s StructLit) Typing(ds []Decl, delta Delta, gamma Gamma,
-	allowStupid bool) Type {
+	allowStupid bool) (Type, FGGExpr) {
 	s.u_S.Ok(ds, delta)
 	fs := fields(ds, s.u_S)
 	if len(s.elems) != len(fs) {
@@ -139,15 +139,25 @@ func (s StructLit) Typing(ds []Decl, delta Delta, gamma Gamma,
 		b.WriteString(s.String())
 		panic(b.String())
 	}
+	elems := make([]FGGExpr, len(s.elems))
 	for i := 0; i < len(s.elems); i++ {
-		u := s.elems[i].Typing(ds, delta, gamma, allowStupid)
+		u, newSubtree := s.elems[i].Typing(ds, delta, gamma, allowStupid)
 		r := fs[i].u
 		if !u.ImplsDelta(ds, delta, r) {
 			panic("Arg expr must implement field type: arg=" + u.String() +
 				", field=" + r.String() + "\n\t" + s.String())
 		}
+
+		elems[i] = newSubtree
+		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// corresponding to a value of the expected type (u)
+		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
+			if u_P, ok := u.(TPrimitive); ok {
+				elems[i] = ValueFromLiteral(newSubtree, u_P)
+			}
+		}
 	}
-	return s.u_S
+	return s.u_S, StructLit{s.u_S, elems}
 }
 
 // From base.Expr
@@ -236,8 +246,8 @@ func (s Select) Eval(ds []Decl) (FGGExpr, string) {
 }
 
 func (s Select) Typing(ds []Decl, delta Delta, gamma Gamma,
-	allowStupid bool) Type {
-	u := s.e_S.Typing(ds, delta, gamma, allowStupid)
+	allowStupid bool) (Type, FGGExpr) {
+	u, e_S := s.e_S.Typing(ds, delta, gamma, allowStupid)
 	if !IsStructType(ds, u) {
 		panic("Illegal select on expr of non-struct type: " + u.String() +
 			"\n\t" + s.String())
@@ -245,7 +255,7 @@ func (s Select) Typing(ds []Decl, delta Delta, gamma Gamma,
 	fds := fields(ds, u.(TNamed))
 	for _, v := range fds {
 		if v.field == s.field {
-			return v.u
+			return v.u, Select{e_S, s.field}
 		}
 	}
 	panic("Field " + s.field + " not found in type: " + u.String() +
@@ -346,8 +356,8 @@ func (c Call) Eval(ds []Decl) (FGGExpr, string) {
 	return e.Subs(subs), "Call" // N.B. single combined substitution map slightly different to R-Call
 }
 
-func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type {
-	u0 := c.e_recv.Typing(ds, delta, gamma, allowStupid)
+func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
+	u0, e_recv := c.e_recv.Typing(ds, delta, gamma, allowStupid)
 	var g Sig
 	if tmp, ok := methodsDelta(ds, delta, bounds(delta, u0))[c.meth]; !ok { // !!! submission version had "methods(m)"
 		panic("Method not found: " + c.meth + " in " + u0.String())
@@ -385,9 +395,10 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type
 				c.t_args[i].String() + ", param=" + u.String() + "\n\t" + c.String())
 		}
 	}
+	args := make([]FGGExpr, len(c.args))
 	for i := 0; i < len(c.args); i++ {
 		// CHECKME: submission version's notation, (~\tau :> ~\rho)[subs], slightly unclear
-		u_a := c.args[i].Typing(ds, delta, gamma, allowStupid)
+		u_a, newSubtree := c.args[i].Typing(ds, delta, gamma, allowStupid)
 		//.TSubs(subs)  // !!! submission version, subs also applied to ~tau, ..
 		// ..falsely captures "repeat" var occurrences in recursive calls, ..
 		// ..e.g., bad monomorph (Box) example.
@@ -397,9 +408,27 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type
 			panic("Arg expr type must implement param type: arg=" + u_a.String() +
 				", param=" + u_p.String() + "\n\t" + c.String())
 		}
+		args[i] = newSubtree
+		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// corresponding to a value of the expected type (u)
+		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
+			if u_P, ok := u_p.(TPrimitive); ok { // TODO name clash: u_rho & u_Primitive (both currently u_p)
+				args[i] = ValueFromLiteral(newSubtree, u_P)
+			}
+		}
 	}
-	return g.u_ret.TSubs(subs) // subs necessary, c.psi info (i.e., bounds) will be "lost" after leaving this context
+	return g.u_ret.TSubs(subs), Call{e_recv, c.meth, c.t_args, args} // subs necessary, c.psi info (i.e., bounds) will be "lost" after leaving this context
 }
+
+// TODO think of a name; refactor StructLit, Call to use this function
+//func replaceLiterals(node FGGExpr, u_p Type) FGGExpr {
+//	if newSubtree, ok := node.(NumericLiteral); ok {
+//		if u_P, ok := u_p.(TPrimitive); ok {
+//			return ValueFromLiteral(newSubtree, u_P)
+//		}
+//	}
+//	return node
+//}
 
 // From base.Expr
 func (c Call) IsValue() bool {
@@ -493,12 +522,13 @@ func (a Assert) Eval(ds []Decl) (FGGExpr, string) {
 	panic("Cannot reduce: " + a.String())
 }
 
-func (a Assert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type {
-	u := a.e_I.Typing(ds, delta, gamma, allowStupid)
+func (a Assert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
+	u, e_I := a.e_I.Typing(ds, delta, gamma, allowStupid)
+	newAst := Assert{e_I, a.u_cast}
 	a.u_cast.Ok(ds, delta)
 	if IsStructType(ds, u) {
 		if allowStupid {
-			return a.u_cast
+			return a.u_cast, newAst
 		} else {
 			panic("Expr must be an interface type (in a non-stupid context): found " +
 				u.String() + " for\n\t" + a.String())
@@ -506,11 +536,11 @@ func (a Assert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Ty
 	}
 	// u is a TParam or an interface type TName
 	if _, ok := a.u_cast.(TParam); ok || IsNamedIfaceType(ds, a.u_cast) {
-		return a.u_cast // No further checks -- N.B., Robert said they are looking to refine this
+		return a.u_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
 	}
 	// a.u is a struct type TName
 	if a.u_cast.ImplsDelta(ds, delta, u) {
-		return a.u_cast
+		return a.u_cast, newAst
 	}
 	panic("Struct type assertion must implement expr type: asserted=" +
 		a.u_cast.String() + ", expr=" + u.String())
@@ -571,8 +601,8 @@ func (s StringLit) Eval(ds []Decl) (FGGExpr, string) {
 	panic("Cannot reduce: " + s.String())
 }
 
-func (s StringLit) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type {
-	return STRING_TYPE
+func (s StringLit) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
+	return STRING_TYPE, s
 }
 
 // From base.Expr
@@ -642,11 +672,12 @@ func (s Sprintf) Eval(ds []Decl) (FGGExpr, string) {
 }
 
 // TODO: [Warning] not "fully" type checked, cf. MISSING/EXTRA
-func (s Sprintf) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type {
+func (s Sprintf) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
+	args := make([]FGGExpr, len(s.args))
 	for i := 0; i < len(s.args); i++ {
-		s.args[i].Typing(ds, delta, gamma, allowStupid)
+		_, args[i] = s.args[i].Typing(ds, delta, gamma, allowStupid)
 	}
-	return STRING_TYPE
+	return STRING_TYPE, Sprintf{s.format, args}
 }
 
 // From base.Expr
