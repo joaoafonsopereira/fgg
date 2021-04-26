@@ -21,6 +21,9 @@ PRINTF    : 'Printf' ;
 SPRINTF   : 'Sprintf' ;
 
 // base/primitive types
+TRUE      : 'true' ;
+FALSE     : 'false' ;
+
 BOOL      : 'bool' ;
 INT32     : 'int32' ;
 INT64     : 'int64' ;
@@ -53,7 +56,6 @@ STRING          : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' 
 
 fragment DIGITS : DIGIT+ ;
 fragment EXPON  : [eE] [+-]? DIGITS ;
-BOOL_LIT        : 'true' | 'false' ;
 INT_LIT         : DIGITS ;
 FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
                 | '.' DIGITS EXPON?
@@ -114,7 +116,7 @@ expr       : NAME                                   # Variable
            ;
 exprs      : expr (',' expr)* ;
 
-primLit    : lit=BOOL_LIT                           # BoolLit
+primLit    : lit=(TRUE|FALSE)                     # BoolLit
            | lit=INT_LIT                            # IntLit
            | lit=FLOAT_LIT                          # FloatLit
            ; // string, ...

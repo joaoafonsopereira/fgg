@@ -106,36 +106,36 @@ type NumericLiteral struct {
 
 var _ FGGExpr = NumericLiteral{}
 
-func (b NumericLiteral) Payload() interface{} { return b.payload }
-func (b NumericLiteral) Tag() Tag             { return b.tag }
+func (n NumericLiteral) Payload() interface{} { return n.payload }
+func (n NumericLiteral) Tag() Tag             { return n.tag }
 
-func (b NumericLiteral) Subs(map[Variable]FGGExpr) FGGExpr {
-	return b
+func (n NumericLiteral) Subs(map[Variable]FGGExpr) FGGExpr {
+	return n
 }
 
-func (b NumericLiteral) TSubs(subs map[TParam]Type) FGGExpr {
-	return b
+func (n NumericLiteral) TSubs(subs map[TParam]Type) FGGExpr {
+	return n
 }
 
-func (b NumericLiteral) Eval([]Decl) (FGGExpr, string) {
-	panic("Cannot reduce: " + b.String())
+func (n NumericLiteral) Eval([]Decl) (FGGExpr, string) {
+	panic("Cannot reduce: " + n.String())
 }
 
-func (b NumericLiteral) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) Type {
-	return TPrimitive{tag: b.tag, undefined: true}
+func (n NumericLiteral) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
+	return TPrimitive{tag: n.tag, undefined: true}, n
 }
 
-func (b NumericLiteral) IsValue() bool {
+func (n NumericLiteral) IsValue() bool {
 	return true
 }
 
-func (b NumericLiteral) CanEval([]base.Decl) bool {
+func (n NumericLiteral) CanEval([]base.Decl) bool {
 	return false
 }
 
-func (b NumericLiteral) String() string {
+func (n NumericLiteral) String() string {
 	var payload string
-	switch p := b.payload.(type) {
+	switch p := n.payload.(type) {
 	case int64:
 		payload = strconv.FormatInt(p, 10)
 	case float64:
@@ -143,11 +143,11 @@ func (b NumericLiteral) String() string {
 	default:
 		panic("NumericLiteral.String() for unsupported type")
 	}
-	tag := NameFromTag(b.tag)
+	tag := NameFromTag(n.tag)
 	return "NumericLiteral{payload=" + payload + ", tag=" + tag + "}"
 }
 
-func (b NumericLiteral) ToGoString(ds []base.Decl) string {
+func (n NumericLiteral) ToGoString(ds []base.Decl) string {
 	panic("implement me NumericLiteral.ToGoString")
 }
 

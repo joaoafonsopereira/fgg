@@ -24,10 +24,10 @@ type Type base.Type //
 /* Constants */
 
 var STRING_TYPE = TNamed("string")
-var PRIMITIVE_TYPES = make(map[Type]Type)
+//var PRIMITIVE_TYPES = make(map[Type]Type)
 
 func init() {
-	PRIMITIVE_TYPES[STRING_TYPE] = STRING_TYPE
+	//PRIMITIVE_TYPES[STRING_TYPE] = STRING_TYPE
 }
 
 /* Name, Context, Type */
