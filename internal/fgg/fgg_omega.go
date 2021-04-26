@@ -121,7 +121,9 @@ func collectExpr(ds []Decl, gamma GroundGamma, e FGGExpr, omega Omega) bool {
 		for k, v := range gamma {
 			gamma1[k] = v
 		}
-		u_recv := e1.e_recv.Typing(ds, make(Delta), gamma1, false).(TNamed)
+		// TODO check _ assign
+		tmp, _ := e1.e_recv.Typing(ds, make(Delta), gamma1, false)
+		u_recv:= tmp.(TNamed)
 		k_t := toKey_Wt(u_recv)
 		if _, ok := omega.us[k_t]; !ok {
 			omega.us[k_t] = u_recv

@@ -161,7 +161,8 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, e FGGExpr, omega Nomeg
 		for k, v := range gamma {
 			gamma1[k] = v
 		}
-		u_recv := e1.e_recv.Typing(ds, delta, gamma1, false)
+		// TODO check _ assign
+		u_recv, _ := e1.e_recv.Typing(ds, delta, gamma1, false)
 		k_t := tokeyWtOpen(u_recv)
 		if _, ok := omega.us[k_t]; !ok {
 			omega.us[k_t] = u_recv
@@ -644,7 +645,8 @@ func buildGraphExpr(ds []Decl, delta Delta, gamma Gamma, curr RecvMethPair, e1 F
 		for _, arg := range e.args {
 			buildGraphExpr(ds, delta, gamma, curr, arg, graph)
 		}
-		u_recv := e.e_recv.Typing(ds, delta, gamma, true)
+		// TODO check _ assign
+		u_recv, _ := e.e_recv.Typing(ds, delta, gamma, true)
 
 		if isStructType(ds, u_recv) { // u_recv is a TNamed struct
 			u_S := u_recv.(TNamed)

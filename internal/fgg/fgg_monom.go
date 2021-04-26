@@ -19,7 +19,7 @@ var _ = fmt.Errorf
 func ToMonomId(u Type) fg.Type {
 	if a, ok := u.(TParam); ok {
 		if _, foo := PRIMITIVE_TYPES[a]; foo {
-			return fg.Type(string(a))
+			return fg.TNamed(string(a))
 		}
 	}
 	return toMonomId(u.(TNamed))
@@ -34,7 +34,7 @@ func MonomExpr(e FGGExpr) fg.FGExpr {
 // All m (MethInstan.meth) belong to the same t (MethInstan.u_recv.t_name)
 type Mu map[string]MethInstan // Cf. Omega, toKey_Wm
 
-var empty_I = fg.Type("Top") // !!!
+var empty_I = fg.TNamed("Top") // !!!
 //var empty_S = fg.Type("Empty")
 
 /* Monomorph: FGGProgram -> FGProgram */
@@ -98,7 +98,7 @@ func monomTDecl1(ds []Decl, omega Omega, td TypeDecl) []fg.TDecl {
 	return res
 }
 
-func monomSTypeLit1(t_monom fg.Type, s STypeLit, eta Eta) fg.STypeLit {
+func monomSTypeLit1(t_monom fg.TNamed, s STypeLit, eta Eta) fg.STypeLit {
 	fds := make([]fg.FieldDecl, len(s.fDecls))
 	for i := 0; i < len(s.fDecls); i++ {
 		fd := s.fDecls[i]
@@ -109,7 +109,7 @@ func monomSTypeLit1(t_monom fg.Type, s STypeLit, eta Eta) fg.STypeLit {
 	return fg.NewSTypeLit(t_monom, fds)
 }
 
-func monomITypeLit1(t_monom fg.Type, c ITypeLit, eta Eta, mu Mu) fg.ITypeLit {
+func monomITypeLit1(t_monom fg.TNamed, c ITypeLit, eta Eta, mu Mu) fg.ITypeLit {
 	var ss []fg.Spec
 	pds_empty := []fg.ParamDecl{}
 	subs := make(Delta) // TODO: refactor -- because of Sig.TSubs
@@ -240,7 +240,7 @@ func monomExpr1(e1 FGGExpr, eta Eta) fg.FGExpr {
 
 /* Helpers */
 
-func toMonomId(u TNamed) fg.Type {
+func toMonomId(u TNamed) fg.TNamed {
 	if u.Equals(STRING_TYPE_MONOM) { // HACK
 		return fg.STRING_TYPE
 	}
@@ -249,7 +249,7 @@ func toMonomId(u TNamed) fg.Type {
 	res = strings.Replace(res, "(", "<", -1)
 	res = strings.Replace(res, ")", ">", -1)
 	res = strings.Replace(res, " ", "", -1)
-	return fg.Type(res)
+	return fg.TNamed(res)
 }
 
 /*// Pre: len(targs) > 0
