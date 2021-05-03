@@ -101,3 +101,30 @@ func Test023b(t *testing.T) {
 	//prog := fggParseAndOkGood(t, A, Am, e)
 	//testutils.EvalAndOkGood(t, prog, 4)
 }
+
+// Test instantiation of a generic type with int32
+func Test024(t *testing.T) {
+	Any := "type Any(type ) interface {}"
+	A := "type A(type a Any()) struct { x a }"
+	//Am := "func (x0 A(type a Any())) add1(type b Any())() b { return x0.x + 1 }"
+	e := "A(int32){2147483647}"
+	fggParseAndOkGood(t, Any, A, e)
+
+	//prog := fggParseAndOkGood(t, Any, A, e)
+	//testutils.EvalAndOkGood(t, prog, 4)
+
+	//prog := fggParseAndOkMonomGood(t, Any, A, e)
+	//testutils.EvalAndOkGood(t, prog, 1)
+}
+
+// Test instantiation of a generic method with int32
+func Test024b(t *testing.T) {
+	Any := "type Any(type ) interface {}"
+	A := "type A(type ) struct {}"
+	Am := "func (x0 A(type )) id(type b Any())(x b) b { return x }"
+	e := "A(){}.id(int32)(52)"
+	fggParseAndOkGood(t, Any, A, Am, e)
+
+	//prog := fggParseAndOkGood(t, Any, A, Am, e)
+	//testutils.EvalAndOkGood(t, prog, 4)
+}
