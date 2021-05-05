@@ -142,7 +142,7 @@ func (a *FGGAdaptor) ExitProgram(ctx *parser.ProgramContext) {
 
 // Children: 1=NAME, 2=typeFormals, 3=typeLit
 func (a *FGGAdaptor) ExitTypeDecl(ctx *parser.TypeDeclContext) {
-	t := fgg.Name(ctx.GetChild(1).(*antlr.TerminalNodeImpl).GetText())
+	t := fgg.Name(ctx.GetId().GetText())
 	td := a.pop().(fgg.TypeDecl)
 	psi := a.pop().(fgg.BigPsi)
 	if s, ok := td.(fgg.STypeLit); ok { // N.B. s is a *copy* of td
