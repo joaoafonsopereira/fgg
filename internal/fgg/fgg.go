@@ -42,7 +42,6 @@ func init() {
 
 type Name = base.Name
 type FGGNode = base.AstNode
-type Decl = base.Decl
 
 /* Name, Type, Type param, Type name -- !!! submission version, "Type name" overloaded */
 
@@ -607,13 +606,13 @@ func MakeEtaOpen(Psi BigPsi, psi SmallPsi) EtaOpen {
 	return eta
 }
 
-/* AST base intefaces: FGGNode, Decl, TypeDecl, Spec, Expr */
+/* AST base intefaces: FGGNode, Decl, Spec, Expr */
 
-// FGGNode, Decl: see Aliases (at top)
+// FGGNode, Name: see Aliases (at top)
 
-type TypeDecl interface {
-	Decl
-	GetBigPsi() BigPsi // TODO: rename? potential clash with, e.g., MDecl, can cause "false" interface satisfaction
+type Decl interface {
+	base.Decl
+	GetBigPsi() BigPsi
 }
 
 type Spec interface {

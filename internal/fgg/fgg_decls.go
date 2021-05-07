@@ -23,10 +23,16 @@ func NewProgram(ds []Decl, e FGGExpr, printf bool) FGGProgram {
 	return FGGProgram{ds, e, printf}
 }
 
-func NewSTypeLit(t Name, Psi BigPsi, fds []FieldDecl) STypeLit { return STypeLit{t, Psi, fds} }
+//func NewSTypeLit(t Name, Psi BigPsi, fds []FieldDecl) STypeLit { return STypeLit{t, Psi, fds} }
+//func NewITypeLit(t_I Name, Psi BigPsi, specs []Spec) ITypeLit {
+//	return ITypeLit{t_I, Psi, specs}
+//}
 
-func NewITypeLit(t_I Name, Psi BigPsi, specs []Spec) ITypeLit {
-	return ITypeLit{t_I, Psi, specs}
+func NewSTypeLit(fds []FieldDecl) STypeLit { return STypeLit{fds} }
+func NewITypeLit(specs []Spec) ITypeLit    { return ITypeLit{specs} }
+
+func NewTypeDecl(name Name, Psi BigPsi, srcType Type) TypeDecl {
+	return TypeDecl{name, Psi, srcType}
 }
 
 func NewMethDecl(
@@ -131,72 +137,6 @@ func (p FGGProgram) String() string {
 	}
 	b.WriteString(" }")
 	return b.String()
-}
-
-/* STypeLit, FieldDecl */
-
-type STypeLit struct {
-	t_name Name
-	Psi    BigPsi
-	fDecls []FieldDecl
-}
-
-var _ TypeDecl = STypeLit{}
-
-func (s STypeLit) GetName() Name              { return s.t_name }
-func (s STypeLit) GetBigPsi() BigPsi          { return s.Psi }
-func (s STypeLit) GetFieldDecls() []FieldDecl { return s.fDecls }
-
-func (s STypeLit) Ok(ds []Decl) {
-	s.Psi.Ok(ds, PRIMITIVE_PSI)
-	seen := make(map[Name]FieldDecl)
-	//delta := s.Psi.ToDelta()
-	root := makeRootPsi(s.Psi)
-	delta := root.ToDelta()
-	for _, v := range s.fDecls {
-		if _, ok := seen[v.field]; ok {
-			panic("Duplicate field name: " + v.field + "\n\t" + s.String())
-		}
-		seen[v.field] = v
-		v.u.Ok(ds, delta)
-	}
-	u_S := TNamed{s.t_name, s.Psi.Hat()}
-	if isRecursiveFieldType(ds, make(map[string]TNamed), u_S) {
-		panic("Invalid recursive struct type:\n\t" + s.String())
-	}
-}
-
-func (s STypeLit) String() string {
-	var b strings.Builder
-	b.WriteString("type ")
-	b.WriteString(string(s.t_name))
-	b.WriteString(s.Psi.String())
-	b.WriteString(" struct {")
-	if len(s.fDecls) > 0 {
-		b.WriteString(" ")
-		writeFieldDecls(&b, s.fDecls)
-		b.WriteString(" ")
-	}
-	b.WriteString("}")
-	return b.String()
-}
-
-type FieldDecl struct {
-	field Name
-	u     Type // u=tau
-}
-
-var _ FGGNode = FieldDecl{}
-
-func (fd FieldDecl) GetName() Name { return fd.field }
-func (fd FieldDecl) GetType() Type { return fd.u }
-
-func (fd FieldDecl) Subs(subs map[TParam]Type) FieldDecl {
-	return FieldDecl{fd.field, fd.u.TSubs(subs)}
-}
-
-func (fd FieldDecl) String() string {
-	return fd.field + " " + fd.u.String()
 }
 
 /* MethDecl, ParamDecl */
@@ -321,72 +261,7 @@ func (pd ParamDecl) String() string {
 	return pd.name + " " + pd.u.String()
 }
 
-/* ITypeLit, Sig */
-
-type ITypeLit struct {
-	t_I   Name
-	Psi   BigPsi
-	specs []Spec
-}
-
-var _ TypeDecl = ITypeLit{}
-
-func (c ITypeLit) GetName() Name     { return c.t_I }
-func (c ITypeLit) GetBigPsi() BigPsi { return c.Psi }
-func (c ITypeLit) GetSpecs() []Spec  { return c.specs }
-
-func (c ITypeLit) Ok(ds []Decl) {
-	c.Psi.Ok(ds, PRIMITIVE_PSI)
-	root := makeRootPsi(c.Psi)
-	delta := root.ToDelta()
-	seen_g := make(map[Name]Sig)    // !!! unique(~S) more flexible
-	seen_u := make(map[string]Type) // key is u.String()
-	for _, v := range c.specs {
-		switch s := v.(type) {
-		case Sig:
-			if _, ok := seen_g[s.meth]; ok {
-				panic("Multiple sigs with name: " + s.meth + "\n\t" + c.String())
-			}
-			seen_g[s.meth] = s
-			s.Ok(ds, root)
-		case TNamed:
-			k := s.String()
-			if _, ok := seen_u[k]; ok {
-				panic("Repeat embedding of type: " + k + "\n\t" + c.String())
-			}
-			seen_u[k] = s
-			if !IsNamedIfaceType(ds, s) { // CHECKME: allow embed type param?
-				panic("Embedded type must be a named interface, not: " + k + "\n\t" + c.String())
-			}
-			s.Ok(ds, delta)
-			if isRecursiveInterfaceEmbedding(ds, make(map[string]TNamed), s) {
-				panic("Invalid recursive interface embedding type:\n\t" + c.String())
-			}
-		default:
-			panic("Unknown Spec kind: " + reflect.TypeOf(v).String() + "\n\t" +
-				c.String())
-		}
-	}
-}
-
-func (c ITypeLit) String() string {
-	var b strings.Builder
-	b.WriteString("type ")
-	b.WriteString(string(c.t_I))
-	b.WriteString(c.Psi.String())
-	b.WriteString(" interface {")
-	if len(c.specs) > 0 {
-		b.WriteString(" ")
-		b.WriteString(c.specs[0].String())
-		for _, v := range c.specs[1:] {
-			b.WriteString("; ")
-			b.WriteString(v.String())
-		}
-		b.WriteString(" ")
-	}
-	b.WriteString("}")
-	return b.String()
-}
+/* Sig */
 
 type Sig struct {
 	meth   Name
@@ -447,6 +322,39 @@ func (g Sig) String() string {
 	writeParamDecls(&b, g.pDecls)
 	b.WriteString(") ")
 	b.WriteString(g.u_ret.String())
+	return b.String()
+}
+
+/* Type Declaration */
+
+type TypeDecl struct {
+	name    Name
+	Psi     BigPsi
+	srcType Type
+}
+
+var _ Decl = TypeDecl{}
+
+func (t TypeDecl) GetName() base.Name  { return t.name }
+func (t TypeDecl) GetBigPsi() BigPsi   { return t.Psi }
+func (t TypeDecl) GetSourceType() Type { return t.srcType }
+
+func (t TypeDecl) Ok(ds []base.Decl) {
+	// check type formals
+	t.Psi.Ok(ds, PRIMITIVE_PSI)
+	root := makeRootPsi(t.Psi) // TODO is makeRootPsi only needed because of PRIMITIVE_PSI?
+	delta := root.ToDelta()
+	// check source type
+	t.srcType.Ok(ds, delta)
+}
+
+func (t TypeDecl) String() string {
+	var b strings.Builder
+	b.WriteString("type ")
+	b.WriteString(string(t.name))
+	b.WriteString(t.Psi.String())
+	b.WriteString(" ")
+	b.WriteString(t.srcType.String())
 	return b.String()
 }
 
