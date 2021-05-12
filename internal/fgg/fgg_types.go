@@ -60,10 +60,6 @@ func (s STypeLit) Ok(ds []Decl, delta Delta) {
 		seen[v.field] = v
 		v.u.Ok(ds, delta)
 	}
-	u_S := TNamed{s.t_name, s.Psi.Hat()}
-	if isRecursiveFieldType(ds, make(map[string]TNamed), u_S) {
-		panic("Invalid recursive struct type:\n\t" + s.String())
-	}
 }
 
 func (s STypeLit) Equals(t base.Type) bool {
@@ -220,9 +216,6 @@ func (i ITypeLit) Ok(ds []Decl, delta Delta) {
 				panic("Embedded type must be a named interface, not: " + k + "\n\t" + i.String())
 			}
 			s.Ok(ds, delta)
-			if isRecursiveInterfaceEmbedding(ds, make(map[string]TNamed), s) {
-				panic("Invalid recursive interface embedding type:\n\t" + c.String())
-			}
 		default:
 			panic("Unknown Spec kind: " + reflect.TypeOf(v).String() + "\n\t" +
 				i.String())

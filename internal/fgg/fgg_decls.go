@@ -346,6 +346,9 @@ func (t TypeDecl) Ok(ds []base.Decl) {
 	delta := root.ToDelta()
 	// check source type
 	t.srcType.Ok(ds, delta)
+
+	// check if the declaration has cycles (e.g. type A B; type B A)
+	checkCyclicTypeDecl(ds, t, t.srcType)
 }
 
 func (t TypeDecl) String() string {
@@ -379,6 +382,68 @@ func makeRootPsi(Psi BigPsi) BigPsi {
 	}
 	return BigPsi{tFormals}
 }
+
+// For a type declaration decl, searches for any occurrence
+// of decl.GetName() in the target type, recursively
+func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type) {
+	switch target := target.(type) {
+	case TParam, TPrimitive:
+		return
+	case TNamed:
+		if target.GetName() == decl.GetName() {
+			panic("Invalid cyclic declaration: " + decl.String())
+		}
+		targetDecl := getTDecl(ds, target.GetName())
+		checkCyclicTypeDecl(ds, decl, targetDecl.GetSourceType())
+
+	case STypeLit:
+		for _, f := range target.GetFieldDecls() {
+			if u, ok := f.u.(TNamed); ok {
+				//if isStructType(ds, u) // CHECKME: without this check, the next call may be needlessly checking for cycles in u_I's -- cf. commented checkCyclicTypeDecl
+				checkCyclicTypeDecl(ds, decl, u)
+			}
+		}
+	case ITypeLit:
+		for _, s := range target.GetSpecs() {
+			if u, ok := s.(TNamed); ok {
+				// u is a u_I, checked in Ok
+				checkCyclicTypeDecl(ds, decl, u)
+			}
+		}
+	}
+}
+
+/* Version with fromStruct "optimization" */
+//func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type, fromStruct bool) {
+//	switch target := target.(type) {
+//	case TParam, TPrimitive:
+//		return
+//	case TNamed:
+//		if target.GetName() == decl.GetName() {
+//			panic("Invalid cyclic declaration: " + decl.String())
+//		}
+//		targetDecl := getTDecl(ds, target.GetName())
+//		checkCyclicTypeDecl(ds, decl, targetDecl.GetSourceType(), fromStruct)
+//
+//	case STypeLit:
+//		for _, f := range target.GetFieldDecls() {
+//			if u, ok := f.u.(TNamed); ok {
+//				//if isStructType(ds, u) // CHECKME: without this check, the next call may be needlessly checking for cycles in u_I's
+//				checkCyclicTypeDecl(ds, decl, u, true)
+//			}
+//		}
+//	case ITypeLit:
+//		if fromStruct {
+//			return
+//		}
+//		for _, s := range target.GetSpecs() {
+//			if u, ok := s.(TNamed); ok {
+//				// u is a u_I, checked in Ok
+//				checkCyclicTypeDecl(ds, decl, u, fromStruct)
+//			}
+//		}
+//	}
+//}
 
 // Pre: isStruct(ds, u_S)
 func isRecursiveFieldType(ds []Decl, seen map[string]TNamed, u_S TNamed) bool {
