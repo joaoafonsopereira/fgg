@@ -176,7 +176,7 @@ func (md MethDecl) Ok(ds []Decl) {
 		delta[v.name] = v.u_I
 	}
 
-	td := getTDecl(ds, md.t_recv)
+	td := getTDecl(ds, md.t_recv) // panics if not found
 	tfs_td := td.GetBigPsi().tFormals
 	if len(tfs_td) != len(md.Psi_recv.tFormals) {
 		panic("Receiver type parameter arity mismatch:\n\tmdecl=" + md.t_recv +
@@ -381,8 +381,7 @@ func makeRootPsi(Psi BigPsi) BigPsi {
 }
 
 // Pre: isStruct(ds, u_S)
-func isRecursiveFieldType(ds []Decl, seen map[string]TNamed,
-	u_S TNamed) bool {
+func isRecursiveFieldType(ds []Decl, seen map[string]TNamed, u_S TNamed) bool {
 	k := u_S.String()
 	if _, ok := seen[k]; ok {
 		return true
@@ -404,13 +403,12 @@ func isRecursiveFieldType(ds []Decl, seen map[string]TNamed,
 }
 
 // Pre: isNamedIfaceType(ds, t_I), t_I OK already checked
-func isRecursiveInterfaceEmbedding(ds []Decl, seen map[string]TNamed,
-	u_I TNamed) bool {
+func isRecursiveInterfaceEmbedding(ds []Decl, seen map[string]TNamed, u_I TNamed) bool {
 	k := u_I.String()
 	if _, ok := seen[k]; ok {
 		return true
 	}
-	td := getTDecl(ds, u_I.t_name).(ITypeLit)
+	td := getTDecl(ds, u_I.t_name).GetSourceType().(ITypeLit)
 	for _, v := range td.specs {
 		emb, ok := v.(TNamed)
 		if !ok {

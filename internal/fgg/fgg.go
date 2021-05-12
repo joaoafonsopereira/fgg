@@ -620,6 +620,16 @@ func MakeEtaOpen(Psi BigPsi, psi SmallPsi) EtaOpen {
 	return eta
 }
 
+// TODO kind of duplicates Eta/EtaOpen, think how to merge with one of them
+//  (cf. MakeEta)
+func MakeTSubs(Psi BigPsi, u_args []Type) map[TParam]Type {
+	subs := make(map[TParam]Type)
+	for i := 0; i < len(Psi.tFormals); i++ {
+		subs[Psi.tFormals[i].name] = u_args[i]
+	}
+	return subs
+}
+
 /* AST base intefaces: FGGNode, Decl, Spec, Expr */
 
 // FGGNode, Name: see Aliases (at top)
@@ -649,38 +659,44 @@ type FGGExpr interface {
 // Helpful for MDecl.t_recv
 func isStructName(ds []Decl, t Name) bool {
 	for _, v := range ds {
-		d, ok := v.(STypeLit)
-		if ok && d.t_name == t {
-			return true
+		if d, ok := v.(TypeDecl); ok {
+			if d.GetName() == t {
+				return isStructType(ds, d.GetSourceType())
+			}
 		}
 	}
 	return false
 }
 
+// TODO unify this function and the next into one
+func isStructTypeBase(ds[] Decl, t Type) bool {
+	under := t.Underlying(ds)
+	_, ok := under.(STypeLit)
+	return ok
+}
+
 // Check if u is a \tau_S -- implicitly must be a TNamed
 func isStructType(ds []Decl, u Type) bool {
-	if u1, ok := u.(TNamed); ok {
-		for _, v := range ds {
-			d, ok := v.(STypeLit)
-			if ok && d.t_name == u1.t_name {
-				return true
-			}
-		}
-	}
-	return false
+	return isStructTypeBase(ds, u)
+}
+
+// TODO unify this function and the next into one
+func isNamedIfaceTypeBase(ds[] Decl, u Type) bool {
+	under := u.Underlying(ds)
+	_, ok := under.(ITypeLit)
+	return ok
 }
 
 // Check if u is a \tau_I -- N.B. looks for a *TNamed*, i.e., not a TParam
 func isNamedIfaceType(ds []Decl, u Type) bool {
 	if u1, ok := u.(TNamed); ok {
-		for _, v := range ds {
-			d, ok := v.(ITypeLit)
-			if ok && d.t_I == u1.t_name {
-				return true
-			}
-		}
+		return isNamedIfaceTypeBase(ds, u1)
 	}
 	return false
+}
+
+func isIfaceType(ds []Decl, u Type) bool {
+	return isNamedIfaceTypeBase(ds, u)
 }
 
 func writeTypes(b *strings.Builder, us []Type) {

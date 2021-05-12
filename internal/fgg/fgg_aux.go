@@ -28,17 +28,16 @@ func bounds(delta Delta, u Type) Type {
 
 // Pre: len(s.psi.as) == len (u_S.typs), where s is the STypeLit decl for u_S.t
 func fields(ds []Decl, u_S TNamed) []FieldDecl {
-	s, ok := getTDecl(ds, u_S.t_name).(STypeLit)
+	s, ok := u_S.Underlying(ds).(STypeLit)
 	if !ok {
 		panic("Not a struct type: " + u_S.String())
 	}
-	subs := make(map[TParam]Type) // Cf. MakeEta
-	for i := 0; i < len(s.Psi.tFormals); i++ {
-		subs[s.Psi.tFormals[i].name] = u_S.u_args[i]
-	}
+
+	decl := getTDecl(ds, u_S.t_name)
+	subs := MakeTSubs(decl.Psi, u_S.u_args)
 	fds := make([]FieldDecl, len(s.fDecls))
 	for i := 0; i < len(s.fDecls); i++ {
-		fds[i] = s.fDecls[i].Subs(subs)
+		fds[i] = s.fDecls[i].TSubs(subs)
 	}
 	return fds
 }

@@ -194,14 +194,14 @@ func (s StructLit) ToGoString(ds []Decl) string {
 	var b strings.Builder
 	b.WriteString(s.u_S.ToGoString(ds))
 	b.WriteString("{")
-	td := getTDecl(ds, s.u_S.t_name).(STypeLit)
+	under := s.u_S.Underlying(ds).(STypeLit)
 	if len(s.elems) > 0 {
-		b.WriteString(td.fDecls[0].field)
+		b.WriteString(under.fDecls[0].field)
 		b.WriteString(":")
 		b.WriteString(s.elems[0].ToGoString(ds))
 		for i, v := range s.elems[1:] {
 			b.WriteString(", ")
-			b.WriteString(td.fDecls[i+1].field)
+			b.WriteString(under.fDecls[i+1].field)
 			b.WriteString(":")
 			b.WriteString(v.ToGoString(ds))
 		}
@@ -384,10 +384,7 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 		b.WriteString(c.String())
 		panic(b.String())
 	}
-	subs := make(map[TParam]Type) // CHECKME: applying this subs vs. adding to a new delta?  // Cf. MakeEta
-	for i := 0; i < len(c.t_args); i++ {
-		subs[g.Psi.tFormals[i].name] = c.t_args[i]
-	}
+	subs := MakeTSubs(g.Psi, c.t_args) // CHECKME: applying this subs vs. adding to a new delta?  // Cf. MakeEta
 	for i := 0; i < len(c.t_args); i++ {
 		u := g.Psi.tFormals[i].u_I.TSubs(subs)
 		if !c.t_args[i].ImplsDelta(ds, delta, u) {
