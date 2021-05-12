@@ -54,61 +54,58 @@ func MethodsDelta1(ds []Decl, delta Delta, u Type) map[Name]Sig {
 }
 
 func methodsDelta(ds []Decl, delta Delta, u Type) map[Name]Sig {
-	res := make(map[Name]Sig)
-	if IsStructType(ds, u) {
-		for _, v := range ds {
-			md, ok := v.(MethDecl)
-			if ok && isStructName(ds, md.t_recv) {
-				//sd := md.recv.u.(TName)
-				u_S := u.(TNamed)
-				if md.t_recv == u_S.t_name {
-					/*subs := make(map[TParam]Type)                    // Cf. MakeEta
-					for i := 0; i < len(md.Psi_recv.tFormals); i++ { // TODO: md.Psi_recv.ToDelta
-						subs[md.Psi_recv.tFormals[i].name] = u_S.u_args[i]
-					}
-					//for i := 0; i < len(md.psi.tfs); i++ { // CHECKME: because TParam.TSubs will panic o/w -- refactor?
-					//	subs[md.psi.tfs[i].a] = md.psi.tfs[i].a
-					//}
-					res[md.name] = md.ToSig().TSubs(subs)*/
-					if ok, eta := MakeEtaDelta(ds, delta, md.Psi_recv, u_S.u_args); ok {
-						res[md.name] = md.ToSig().TSubs(eta)
-					}
-				}
-			}
-		}
-	} else if IsNamedIfaceType(ds, u) { // N.B. u is a TName, \tau_I (not a TParam)
-		u_I := u.(TNamed)
-		td := getTDecl(ds, u_I.t_name).(ITypeLit)
-		subs := make(map[TParam]Type) // Cf. MakeEta
-		for i := 0; i < len(td.Psi.tFormals); i++ {
-			subs[td.Psi.tFormals[i].name] = u_I.u_args[i]
-		}
-		for _, s := range td.specs {
-			/*for _, v := range s.GetSigs(ds) {
-				res[v.m] = v
-			}*/
+	switch u_cast := u.(type) {
+	case ITypeLit:
+		res := make(map[Name]Sig)
+		for _, s := range u_cast.specs {
 			switch s1 := s.(type) {
 			case Sig:
-				res[s1.meth] = s1.TSubs(subs)
+				res[s1.meth] = s1
 			case TNamed: // Embedded u_I
-				for k, v := range methods(ds, s1.TSubs(subs)) { // cycles? (cf. submission version)
+				for k, v := range methodsDelta(ds, delta, s1) { // cycles? (cf. submission version)
 					res[k] = v
 				}
 			default:
 				panic("Unknown Spec kind: " + reflect.TypeOf(s).String())
 			}
 		}
-	} else if cast, ok := u.(TParam); ok {
-		upper, ok := delta[cast]
-		if !ok {
-			panic("Unknown type: " + u.String())
+		return res
+
+	case TNamed:
+		// The method set of an interface type is its interface.
+		// The method set of any other TNamed T consists of all methods
+		// declared with receiver type T
+		if u_I, ok := u_cast.Underlying(ds).(ITypeLit); ok {
+			td := getTDecl(ds, u_cast.t_name)
+			subs := MakeTSubs(td.Psi, u_cast.u_args)
+			return methodsDelta(ds, delta, u_I.TSubs(subs))
+		} else {
+			res := make(map[Name]Sig)
+			for _, v := range ds {
+				md, ok := v.(MethDecl)
+				if ok && md.t_recv == u_cast.t_name {
+					if ok, eta := MakeEtaDelta(ds, delta, md.Psi_recv, u_cast.u_args); ok {
+						res[md.name] = md.ToSig().TSubs(eta)
+					}
+				}
+			}
+			return res
 		}
-		//return methodsDelta(ds, delta, bounds(delta, cast)) // !!! delegate to bounds
+
+	case TParam:
+		upper, ok := delta[u_cast]
+		if !ok {
+			panic("TParam: " + u.String() + " not in env: " + delta.String())
+		}
+		//return methodsDelta(ds, delta, bounds(delta, u_cast)) // !!! delegate to bounds
 		return methodsDelta(ds, delta, upper)
-	} else {
+
+	case TPrimitive, STypeLit:
+		return map[Name]Sig{} // primitives don't implement any methods
+
+	default:
 		panic("Unknown type: " + u.String()) // Perhaps redundant if all TDecl OK checked first
 	}
-	return res
 }
 
 // Pre: t_S is a struct type
