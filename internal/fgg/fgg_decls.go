@@ -169,9 +169,15 @@ func (md MethDecl) Ok(ds []Decl) {
 		panic("Receiver must be a struct type: not " + md.t_recv +
 			"\n\t" + md.String())
 	}
-	md.Psi_recv.Ok(ds, BigPsi{}) // !!! premise ok missing
-	md.Psi_meth.Ok(ds, md.Psi_recv)
+	//md.Psi_recv.Ok(ds, BigPsi{}) // !!! premise ok missing
+	//md.Psi_meth.Ok(ds, md.Psi_recv)
+	//delta := md.Psi_recv.ToDelta()
+	//for _, v := range md.Psi_meth.tFormals {
+	//	delta[v.name] = v.u_I
+	//}
+	md.Psi_recv.Ok(ds, make(Delta))
 	delta := md.Psi_recv.ToDelta()
+	md.Psi_meth.Ok(ds, delta)
 	for _, v := range md.Psi_meth.tFormals {
 		delta[v.name] = v.u_I
 	}
@@ -292,12 +298,11 @@ func (g Sig) TSubs(subs map[TParam]Type) Sig {
 	return Sig{g.meth, BigPsi{tfs}, ps, u}
 }
 
-func (g Sig) Ok(ds []Decl, env BigPsi) {
-	env.Ok(ds, BigPsi{})
+//func (g Sig) Ok(ds []Decl, env BigPsi) {
+func (g Sig) Ok(ds []Decl, env Delta) {
 	g.Psi.Ok(ds, env)
-	delta := env.ToDelta()
 	for _, v := range g.Psi.tFormals {
-		delta[v.name] = v.u_I
+		env[v.name] = v.u_I
 	}
 	seen := make(map[Name]ParamDecl)
 	for _, v := range g.pDecls {
@@ -305,9 +310,9 @@ func (g Sig) Ok(ds []Decl, env BigPsi) {
 			panic("Duplicate variable name " + v.name + ":\n\t" + g.String())
 		}
 		seen[v.name] = v
-		v.u.Ok(ds, delta)
+		v.u.Ok(ds, env)
 	}
-	g.u_ret.Ok(ds, delta)
+	g.u_ret.Ok(ds, env)
 }
 
 func (g Sig) GetSigs(_ []Decl) []Sig {
@@ -341,7 +346,7 @@ func (t TypeDecl) GetSourceType() Type { return t.srcType }
 
 func (t TypeDecl) Ok(ds []base.Decl) {
 	// check type formals
-	t.Psi.Ok(ds, PRIMITIVE_PSI)
+	t.Psi.Ok(ds, PRIMITIVE_PSI.ToDelta()) // TODO HACKED
 	root := makeRootPsi(t.Psi) // TODO is makeRootPsi only needed because of PRIMITIVE_PSI?
 	delta := root.ToDelta()
 	// check source type

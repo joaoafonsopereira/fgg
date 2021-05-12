@@ -205,7 +205,7 @@ func (i ITypeLit) Ok(ds []Decl, delta Delta) {
 				panic("Multiple sigs with name: " + s.meth + "\n\t" + i.String())
 			}
 			seen_g[s.meth] = s
-			s.Ok(ds, root)
+			s.Ok(ds, delta)
 		case TNamed:
 			k := s.String()
 			if _, ok := seen_u[k]; ok {

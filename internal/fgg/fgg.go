@@ -463,14 +463,13 @@ type BigPsi struct {
 
 func (Psi BigPsi) GetTFormals() []TFormal { return Psi.tFormals }
 
-func (Psi BigPsi) Ok(ds []Decl, env BigPsi) {
-	delta := env.ToDelta()
+func (Psi BigPsi) Ok(ds []Decl, env Delta) {
 	for _, v := range Psi.tFormals {
-		if _, ok := delta[v.name]; ok {
+		if _, ok := env[v.name]; ok {
 			panic("Duplicate param name " + string(v.name) + " under context: " +
 				env.String() + "\n\t" + Psi.String())
 		}
-		delta[v.name] = v.u_I
+		env[v.name] = v.u_I
 	} // Delta built
 	for _, v := range Psi.tFormals {
 		u_I, ok := v.u_I.(TNamed)
@@ -484,7 +483,7 @@ func (Psi BigPsi) Ok(ds []Decl, env BigPsi) {
 				panic("Upper bound must be a named interface type: not " + v.u_I.String() +
 					"\n\t" + Psi.String())
 			}
-			u_I.Ok(ds, delta) // Checks params bound under delta -- N.B. can forward ref (not restricted left-to-right)
+			u_I.Ok(ds, env) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
 		}
 	}
 }
