@@ -165,67 +165,10 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	case ITypeLit:
 		gs := methodsDelta(ds, delta, u)   // u is a t_I
 		gs0 := methodsDelta(ds, delta, u0) // t0 may be any
-		for k, g := range gs {
-			g0, ok := gs0[k]
-			if !ok || !sigAlphaEquals(g0, g) {
-				return false
-			}
-		}
-		return true
+		return gs0.IsSupersetOf(gs)
 	default:
 		panic("Unknown type: " + u.String())
 	}
-}
-
-type MethodSet map[Name]Sig
-
-func (m0 MethodSet) isSupersetOf(m MethodSet) bool {
-	for k, g := range m {
-		g0, ok := m0[k]
-		if !ok || !sigAlphaEquals(g0, g) {
-			return false
-		}
-	}
-	return true
-}
-
-// !!! Sig in FGG includes ~a and ~x, which naively breaks "impls"
-func sigAlphaEquals(g0 Sig, g Sig) bool {
-	if len(g0.Psi.tFormals) != len(g.Psi.tFormals) || len(g0.pDecls) != len(g.pDecls) {
-		return false
-	}
-	subs0 := makeParamIndexSubs(g0.Psi)
-	subs := makeParamIndexSubs(g.Psi)
-	for i := 0; i < len(g0.Psi.tFormals); i++ {
-		if !g0.Psi.tFormals[i].u_I.TSubs(subs0).
-			Equals(g.Psi.tFormals[i].u_I.TSubs(subs)) {
-			//fmt.Println("z:")
-			return false
-		}
-	}
-	for i := 0; i < len(g0.pDecls); i++ {
-		if !g0.pDecls[i].u.TSubs(subs0).Equals(g.pDecls[i].u.TSubs(subs)) {
-			/*fmt.Println("w1: ", g0.pDecls[i].u, g0.pDecls[i].u.TSubs(subs0))
-			fmt.Println("w2: ", g.pDecls[i].u, g.pDecls[i].u.TSubs(subs))
-			fmt.Println("y:")*/
-			return false
-		}
-	}
-	/*fmt.Println("1:", g0)
-	fmt.Println("2:", g)
-	fmt.Println("3:", g0.meth == g.meth, g0.u_ret.Equals(g.u_ret))
-	fmt.Println("4:", g0.u_ret.TSubs(subs0).Equals(g.u_ret.TSubs(subs)))*/
-	return g0.meth == g.meth && g0.u_ret.TSubs(subs0).Equals(g.u_ret.TSubs(subs))
-}
-
-// CHECKME: Used by sigAlphaEquals, and MDecl.OK (for covariant receiver bounds)
-func makeParamIndexSubs(Psi BigPsi) Delta {
-	subs := make(Delta)
-	for j := 0; j < len(Psi.tFormals); j++ {
-		//subs[Psi.tFormals[j].name] = Psi.tFormals[j].name
-		subs[Psi.tFormals[j].name] = TParam("α" + strconv.Itoa(j+1))
-	}
-	return subs
 }
 
 // Cf. base.Type
@@ -607,16 +550,9 @@ func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	if isIfaceType(ds, u) {
 		return false
 	}
-
 	gs := methodsDelta(ds, delta, u)   // u is a t_I
 	gs0 := methodsDelta(ds, delta, i)
-	for k, g := range gs {
-		g0, ok := gs0[k]
-		if !ok || !sigAlphaEquals(g0, g) {
-			return false
-		}
-	}
-	return true
+	return gs0.IsSupersetOf(gs)
 }
 
 func (i ITypeLit) Impls(ds []base.Decl, t base.Type) bool {
