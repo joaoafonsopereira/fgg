@@ -63,10 +63,6 @@ func (s STypeLit) Equals(t base.Type) bool {
 	panic("implement me")
 }
 
-func (s STypeLit) ToGoString(ds []Decl) string {
-	panic("implement me")
-}
-
 func (s STypeLit) String() string {
 	var b strings.Builder
 	b.WriteString(" struct {")
@@ -77,6 +73,14 @@ func (s STypeLit) String() string {
 	}
 	b.WriteString("}")
 	return b.String()
+}
+
+func (s STypeLit) ToGoString(ds []Decl) string {
+	panic("implement me")
+}
+
+func (s STypeLit) Underlying(ds []Decl) Type {
+	return s
 }
 
 
@@ -186,4 +190,8 @@ func (c ITypeLit) String() string {
 
 func (c ITypeLit) ToGoString(ds []Decl) string {
 	panic("implement me")
+}
+
+func (c ITypeLit) Underlying(ds []Decl) Type {
+	return c
 }

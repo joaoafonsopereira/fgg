@@ -55,6 +55,7 @@ type Type interface {
 	SubsEtaOpen(eta EtaOpen) Type
 	Ok(ds []Decl, delta Delta)
 	ToGoString(ds []Decl) string
+	Underlying(ds []Decl) Type
 }
 
 type TParam Name
@@ -144,6 +145,10 @@ func (a TParam) String() string {
 
 func (a TParam) ToGoString(ds []Decl) string {
 	return string(a)
+}
+
+func (a TParam) Underlying(ds []Decl) Type {
+	return a
 }
 
 // Convention: t=type name (t), u=FGG type (tau)
@@ -340,6 +345,11 @@ func (u TNamed) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
+func (u TNamed) Underlying(ds []Decl) Type {
+	decl := getTDecl(ds, u.t_name)
+	return decl.GetSourceType().Underlying(ds)
+}
+
 /* Primitive types */
 type TPrimitive struct {
 	tag       Tag
@@ -436,6 +446,10 @@ func (t TPrimitive) String() string {
 
 func (t TPrimitive) ToGoString(ds []Decl) string {
 	panic("implement me")
+}
+
+func (t TPrimitive) Underlying(ds []Decl) Type {
+	return t
 }
 
 /* Type formals and actuals */
