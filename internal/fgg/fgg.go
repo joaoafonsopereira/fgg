@@ -42,6 +42,7 @@ func init() {
 
 type Name = base.Name
 type FGGNode = base.AstNode
+type Decl = base.Decl
 
 /* Name, Type, Type param, Type name -- !!! submission version, "Type name" overloaded */
 
@@ -239,10 +240,10 @@ func MakeTSubs(Psi BigPsi, u_args []Type) map[TParam]Type {
 
 // FGGNode, Name: see Aliases (at top)
 
-type Decl interface {
-	base.Decl
-	GetBigPsi() BigPsi
-}
+//type Decl interface {
+//	base.Decl
+//	GetBigPsi() BigPsi
+//}
 
 type Spec interface {
 	FGGNode
@@ -260,13 +261,11 @@ type FGGExpr interface {
 
 /* Helpers */
 
-// Based on FG version -- but currently no FGG equiv of isInterfaceType
-// Helpful for MDecl.t_recv
-func isStructName(ds []Decl, t Name) bool {
-	for _, v := range ds {
-		if d, ok := v.(TypeDecl); ok {
-			if d.GetName() == t {
-				return isStructType(ds, d.GetSourceType())
+func isValidReceiver(ds []Decl, recv Name) bool {
+	for _, d := range ds {
+		if td, ok := d.(TypeDecl); ok {
+			if td.GetName() == recv {
+				return !isIfaceType(ds, td.GetSourceType())
 			}
 		}
 	}
@@ -282,7 +281,7 @@ func isStructTypeBase(ds[] Decl, t Type) bool {
 
 // Check if u is a \tau_S -- implicitly must be a TNamed
 func isStructType(ds []Decl, u Type) bool {
-	return isStructTypeBase(ds, u)
+	return isStructTypeBase(ds, u) // TODO substituir usos de isStructType por isValidReceiver (na maior parte dos casos é a última que se quer) -- tentar até arranjar um nome melhor
 }
 
 // TODO unify this function and the next into one

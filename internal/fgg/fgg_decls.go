@@ -165,16 +165,11 @@ func (md MethDecl) GetReturn() Type            { return md.u_ret }
 func (md MethDecl) GetBody() FGGExpr           { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
-	if !isStructName(ds, md.t_recv) {
-		panic("Receiver must be a struct type: not " + md.t_recv +
+	if !isValidReceiver(ds, md.t_recv) {
+		panic("Invalid receiver type: " + md.t_recv +
 			"\n\t" + md.String())
 	}
-	//md.Psi_recv.Ok(ds, BigPsi{}) // !!! premise ok missing
-	//md.Psi_meth.Ok(ds, md.Psi_recv)
-	//delta := md.Psi_recv.ToDelta()
-	//for _, v := range md.Psi_meth.tFormals {
-	//	delta[v.name] = v.u_I
-	//}
+
 	md.Psi_recv.Ok(ds, make(Delta))
 	delta := md.Psi_recv.ToDelta()
 	md.Psi_meth.Ok(ds, delta)
@@ -449,52 +444,6 @@ func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type) {
 //		}
 //	}
 //}
-
-// Pre: isStruct(ds, u_S)
-func isRecursiveFieldType(ds []Decl, seen map[string]TNamed, u_S TNamed) bool {
-	k := u_S.String()
-	if _, ok := seen[k]; ok {
-		return true
-	}
-	for _, v := range fields(ds, u_S) {
-		if !isStructType(ds, v.u) { // v.u is TNamed -- params OK, type args don't allow writing recursive struct
-			continue
-		}
-		seen1 := make(map[string]TNamed)
-		for k1, v1 := range seen {
-			seen1[k1] = v1
-		}
-		seen1[k] = u_S
-		if isRecursiveFieldType(ds, seen1, v.u.(TNamed)) {
-			return true
-		}
-	}
-	return false
-}
-
-// Pre: isNamedIfaceType(ds, t_I), t_I OK already checked
-func isRecursiveInterfaceEmbedding(ds []Decl, seen map[string]TNamed, u_I TNamed) bool {
-	k := u_I.String()
-	if _, ok := seen[k]; ok {
-		return true
-	}
-	td := getTDecl(ds, u_I.t_name).GetSourceType().(ITypeLit)
-	for _, v := range td.specs {
-		emb, ok := v.(TNamed)
-		if !ok {
-			continue
-		}
-		seen1 := make(map[string]TNamed)
-		for k1, v1 := range seen {
-			seen1[k1] = v1
-		}
-		seen1[k] = u_I
-		if isRecursiveInterfaceEmbedding(ds, seen1, emb) {
-			return true
-		}
-	}
-	return false
-}
 
 // Doesn't include "(...)" -- slightly more convenient for debug messages
 func writeFieldDecls(b *strings.Builder, fds []FieldDecl) {
