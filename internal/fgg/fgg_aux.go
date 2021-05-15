@@ -2,7 +2,6 @@ package fgg
 
 import (
 	"fmt"
-	"reflect"
 	"strconv"
 )
 
@@ -70,17 +69,10 @@ func MethodsDelta1(ds []Decl, delta Delta, u Type) MethodSet {
 func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 	switch u_cast := u.(type) {
 	case ITypeLit:
-		res := make(map[Name]Sig)
+		res := make(MethodSet)
 		for _, s := range u_cast.specs {
-			switch s1 := s.(type) {
-			case Sig:
-				res[s1.meth] = s1
-			case TNamed: // Embedded u_I
-				for k, v := range methodsDelta(ds, delta, s1) { // cycles? (cf. submission version)
-					res[k] = v
-				}
-			default:
-				panic("Unknown Spec kind: " + reflect.TypeOf(s).String())
+			for _, v := range s.GetSigs(ds) {
+				res[v.meth] = v
 			}
 		}
 		return res
@@ -94,7 +86,7 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 			subs := MakeTSubs(td.Psi, u_cast.u_args)
 			return methodsDelta(ds, delta, u_I.TSubs(subs))
 		} else {
-			res := make(map[Name]Sig)
+			res := make(MethodSet)
 			for _, v := range ds {
 				md, ok := v.(MethDecl)
 				if ok && md.t_recv == u_cast.t_name {
@@ -115,7 +107,7 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 		return methodsDelta(ds, delta, upper)
 
 	case TPrimitive, STypeLit:
-		return map[Name]Sig{} // primitives don't implement any methods
+		return MethodSet{} // primitives don't implement any methods
 
 	default:
 		panic("Unknown type: " + u.String()) // Perhaps redundant if all TDecl OK checked first

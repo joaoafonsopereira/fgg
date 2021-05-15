@@ -104,9 +104,7 @@ func (s StructLit) Eval(ds []Decl) (FGExpr, string) {
 }
 
 func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
-	if !isTypeOk(ds, s.t_S) {
-		panic("Unknown type: " + s.t_S.String() + "\n\t" + s.String())
-	}
+	s.t_S.Ok(ds)
 	fs := fields(ds, s.t_S)
 	if len(s.elems) != len(fs) {
 		var b strings.Builder
@@ -176,7 +174,7 @@ func (s StructLit) ToGoString(ds []Decl) string {
 	b.WriteString("main.")
 	b.WriteString(s.t_S.String())
 	b.WriteString("{")
-	td := getTDecl(ds, s.t_S).(STypeLit)
+	td := s.t_S.Underlying(ds).(STypeLit)
 	if len(s.elems) > 0 {
 		b.WriteString(td.fDecls[0].name)
 		b.WriteString(":")
@@ -442,10 +440,8 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 	t, e_I := a.e_I.Typing(ds, gamma, allowStupid)
 	newAst := Assert{e_I, a.t_cast}
-	if !isTypeOk(ds, a.t_cast) {
-		panic("Unknown type: " + a.t_cast.String() + "\n\t" + a.String())
-	}
-	if isStructType(ds, t) {
+	a.t_cast.Ok(ds)
+	if isStructType(ds, t) { // TODO check here: should this check the general case or only struct types?
 		if allowStupid {
 			return a.t_cast, newAst
 		} else {

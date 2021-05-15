@@ -486,7 +486,7 @@ func (c Call) ToGoString(ds []Decl) string {
 
 /* Assert */
 
-type Assert struct {
+type Assert struct { // TODO check Typing/Eval of Assert, as it seems to assume every TNamed is a struct or interface
 	e_I    FGGExpr
 	u_cast Type
 }
@@ -555,7 +555,7 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return a.e_I.(StructLit).u_S.Impls(ds, a.u_cast)
+	return a.e_I.(StructLit).u_S.Impls(ds, a.u_cast) // TODO assumes only structs? <------------------
 }
 
 func (a Assert) String() string {

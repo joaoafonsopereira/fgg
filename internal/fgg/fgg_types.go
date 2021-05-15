@@ -8,8 +8,9 @@ import (
 )
 
 
-type TParam Name
+/* Type parameters */
 
+type TParam Name
 var _ Type = TParam("")
 
 func (a TParam) TSubs(subs map[TParam]Type) Type {
@@ -61,12 +62,9 @@ func (a TParam) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 }
 
 // Cf. base.Type
-func (a TParam) Impls(ds []Decl, u base.Type) bool {
-	if _, ok := u.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(u).String() +
-			":\n\t" + u.String())
-	}
-	return a.ImplsDelta(ds, make(Delta), u.(Type))
+func (a TParam) Impls(ds []Decl, t base.Type) bool {
+	u := asFGGType(t)
+	return a.ImplsDelta(ds, make(Delta), u)
 }
 
 func (a TParam) Ok(ds []Decl, delta Delta) {
@@ -78,13 +76,10 @@ func (a TParam) Ok(ds []Decl, delta Delta) {
 	}
 }
 
-func (a TParam) Equals(u base.Type) bool {
-	if _, ok := u.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(u).String() +
-			":\n\t" + u.String())
-	}
+func (a TParam) Equals(t base.Type) bool {
+	u := asFGGType(t)
 	if b, ok := u.(TParam); ok {
-		return a == b // Handles primitives
+		return a == b // Handles primitives TODO check this
 	}
 	return false
 }
@@ -101,7 +96,8 @@ func (a TParam) Underlying(ds []Decl) Type {
 	return a
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/******************************************************************************/
+/* Named (defined) types -- the only 'kind' that may take type parameters */
 
 // Convention: t=type name (t), u=FGG type (tau)
 type TNamed struct {
@@ -173,11 +169,8 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 
 // Cf. base.Type
 func (u0 TNamed) Impls(ds []Decl, u base.Type) bool {
-	if _, ok := u.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(u).String() +
-			":\n\t" + u.String())
-	}
-	return u0.ImplsDelta(ds, make(Delta), u.(Type))
+	u_fgg := asFGGType(u)
+	return u0.ImplsDelta(ds, make(Delta), u_fgg)
 }
 
 func (u0 TNamed) Ok(ds []Decl, delta Delta) {
@@ -224,11 +217,8 @@ func (u TNamed) GetSigs(ds []Decl) []Sig {
 	return res
 }
 
-func (u0 TNamed) Equals(u base.Type) bool {
-	if _, ok := u.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(u).String() +
-			":\n\t" + u.String())
-	}
+func (u0 TNamed) Equals(t base.Type) bool {
+	u := asFGGType(t)
 	if _, ok := u.(TNamed); !ok {
 		return false
 	}
@@ -268,9 +258,9 @@ func (u TNamed) Underlying(ds []Decl) Type {
 	return decl.GetSourceType().Underlying(ds)
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
+/******************************************************************************/
 /* Primitive types */
+
 type TPrimitive struct {
 	tag       Tag
 	undefined bool
@@ -312,11 +302,6 @@ func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
 }
 
 func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
-	if _, ok := u.(Type); !ok {
-		panic("Expected FGR type, not " + reflect.TypeOf(u).String() +
-			":\n\t" + u.String())
-	}
-
 	// TODO it may be better to separate defined/undefined TPrimitives (?)
 	switch u_cast := u.(type) {
 	case TPrimitive:
@@ -326,7 +311,7 @@ func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 			return t0.Equals(u_cast)
 		}
 	case TNamed:
-		if t0.Undefined() {
+		if t0.Undefined() { // e.g. 1 'implements' MyInt
 			return t0.ImplsDelta(ds, delta, u.Underlying(ds))
 		} else {
 			return isNamedIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
@@ -339,11 +324,8 @@ func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 }
 
 func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
-	if _, ok := t.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(t).String() +
-			":\n\t" + t.String())
-	}
-	return t0.ImplsDelta(ds, make(Delta), t.(Type))
+	t_fgg := asFGGType(t)
+	return t0.ImplsDelta(ds, make(Delta), t_fgg)
 }
 
 func (t TPrimitive) Ok(ds []Decl, delta Delta) {
@@ -351,14 +333,11 @@ func (t TPrimitive) Ok(ds []Decl, delta Delta) {
 }
 
 func (t0 TPrimitive) Equals(t base.Type) bool {
-	if _, ok := t.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(t).String() +
-			":\n\t" + t.String())
-	}
-	if _, ok := t.(TPrimitive); !ok {
+	u := asFGGType(t)
+	if _, ok := u.(TPrimitive); !ok {
 		return false
 	}
-	return t0 == t.(TPrimitive)
+	return t0 == u.(TPrimitive)
 }
 
 func (t TPrimitive) String() string {
@@ -380,7 +359,8 @@ func (t TPrimitive) Underlying(ds []Decl) Type {
 	return t
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/******************************************************************************/
+/* Struct literal */
 
 type STypeLit struct {
 	fDecls []FieldDecl
@@ -420,11 +400,8 @@ func (s STypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 }
 
 func (s STypeLit) Impls(ds []base.Decl, t base.Type) bool {
-	if _, ok := t.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(t).String() +
-			":\n\t" + t.String())
-	}
-	return s.ImplsDelta(ds, make(Delta), t.(Type))
+	u := asFGGType(t)
+	return s.ImplsDelta(ds, make(Delta), u)
 }
 
 func (s STypeLit) Ok(ds []Decl, delta Delta) {
@@ -504,7 +481,8 @@ func (fd FieldDecl) String() string {
 	return fd.field + " " + fd.u.String()
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/******************************************************************************/
+/* Interface literal */
 
 type ITypeLit struct {
 	specs []Spec
@@ -556,11 +534,8 @@ func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 }
 
 func (i ITypeLit) Impls(ds []base.Decl, t base.Type) bool {
-	if _, ok := t.(Type); !ok {
-		panic("Expected FGG type, not " + reflect.TypeOf(t).String() +
-			":\n\t" + t.String())
-	}
-	return i.ImplsDelta(ds, make(Delta), t.(Type))
+	u := asFGGType(t)
+	return i.ImplsDelta(ds, make(Delta), u)
 }
 
 // Pre: delta.Ok
@@ -618,4 +593,18 @@ func (i ITypeLit) ToGoString(ds []Decl) string {
 
 func (i ITypeLit) Underlying(ds []Decl) Type {
 	return i
+}
+
+/******************************************************************************/
+/* Aux */
+
+// Cast to Type as defined in fgg.go.
+// Panics if cast fails.
+func asFGGType(t base.Type) Type {
+	u, ok := t.(Type)
+	if !ok {
+		panic("Expected FGG type, not " + reflect.TypeOf(t).String() +
+			":\n\t" + t.String())
+	}
+	return u
 }

@@ -61,10 +61,9 @@ func (a *FGGAdaptor) Parse(strictParse bool, input string) base.Program {
 	return a.pop().(fgg.FGGProgram)
 }
 
-/* #Typeparam ("typ"), #TypeName ("typ"), #TPrimitive ("typ"), #TypeLit_ ("typ")  */
+/* "typ": #TypeParam, #TypeName, #TPrimitive, #TypeLit_ */
 
 func (a *FGGAdaptor) ExitTypeParam(ctx *parser.TypeParamContext) {
-	//b := fgg.TParam(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
 	b := fgg.TParam(ctx.GetName().GetText())
 	a.push(b)
 }
@@ -216,23 +215,7 @@ func (a *FGGAdaptor) ExitParamDecl(ctx *parser.ParamDeclContext) {
 	a.push(fgg.NewParamDecl(x, u))
 }
 
-/* "specs", #SigSpec ("spec"), #InterfaceSpec ("spec"), "sig" */
-
-func (a *FGGAdaptor) ExitSigSpec(ctx *parser.SigSpecContext) {
-	// No action -- Sig is at a.stack[len(a.stack)-1]
-}
-
-func (a *FGGAdaptor) ExitInterfaceSpec(ctx *parser.InterfaceSpecContext) {
-	/////// TODO this check seems unnecessary -- it's already made in ITypeLit.Ok()
-	popped := a.pop()
-	cast, ok := popped.(fgg.TNamed)
-	if !ok {
-		panic(testutils.PARSER_PANIC_PREFIX + "Expected TNamed, not: " + reflect.TypeOf(popped).String() +
-			"\n\t" + popped.String())
-	}
-	a.push(cast) // Check TName (should specifically be a \tau_I) -- CHECKME: enforce in BNF?
-	/////// TODO this whole method is unnecessary - should be just similar to ExitSigSpec
-}
+/* "sig" */
 
 func (a *FGGAdaptor) ExitSig(ctx *parser.SigContext) {
 	m := ctx.GetMeth().GetText()

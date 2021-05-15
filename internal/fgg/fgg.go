@@ -240,11 +240,6 @@ func MakeTSubs(Psi BigPsi, u_args []Type) map[TParam]Type {
 
 // FGGNode, Name: see Aliases (at top)
 
-//type Decl interface {
-//	base.Decl
-//	GetBigPsi() BigPsi
-//}
-
 type Spec interface {
 	FGGNode
 	GetSigs(ds []Decl) []Sig
@@ -273,7 +268,7 @@ func isValidReceiver(ds []Decl, recv Name) bool {
 }
 
 // TODO unify this function and the next into one
-func isStructTypeBase(ds[] Decl, t Type) bool {
+func isStructTypeBase(ds []Decl, t Type) bool {
 	under := t.Underlying(ds)
 	_, ok := under.(STypeLit)
 	return ok
@@ -285,7 +280,7 @@ func isStructType(ds []Decl, u Type) bool {
 }
 
 // TODO unify this function and the next into one
-func isNamedIfaceTypeBase(ds[] Decl, u Type) bool {
+func isNamedIfaceTypeBase(ds []Decl, u Type) bool {
 	under := u.Underlying(ds)
 	_, ok := under.(ITypeLit)
 	return ok

@@ -92,9 +92,7 @@ methDecl   : FUNC '(' recv = NAME typn = NAME typeFormals ')' sig '{' RETURN exp
 fieldDecls : fieldDecl (';' fieldDecl)*;
 fieldDecl  : field = NAME typ;
 specs      : spec (';' spec)*;
-spec       : sig		                            # SigSpec
-           | typ	                                # InterfaceSpec
-           ;
+spec       : (sig | typ) ;
 sig        : meth = NAME typeFormals '(' params? ')' typ;
 params     : paramDecl (',' paramDecl)*;
 paramDecl  : vari = NAME typ;
