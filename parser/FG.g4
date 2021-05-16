@@ -71,12 +71,16 @@ FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
 // "plurals", e.g., decls, used for sequences: comes out as "helper" Contexts,
 // nodes that group up actual children underneath -- makes "adapting" easier.
 
-primType   : BOOL
+typ        : name=NAME                              # TNamed
+           | name=primName                          # TPrimitive
+           | typeLit                                # TypeLit_
+           ;
+primName   : BOOL
            | INT32 | INT64
            | FLOAT32 | FLOAT64
            ;
-typeName   : name=primType                          # TPrimitive
-           | name=NAME                              # TNamed
+typeLit    : STRUCT '{' fieldDecls? '}'             # StructTypeLit
+           | INTERFACE '{' specs? '}'               # InterfaceTypeLit
            ;
 program    : PACKAGE MAIN ';'
              (IMPORT STRING ';')?
@@ -84,28 +88,21 @@ program    : PACKAGE MAIN ';'
              ('_' '=' expr | FMT '.' PRINTF '(' '"%#v"' ',' expr ')')
              '}' EOF ;
 decls      : ((typeDecl | methDecl) ';')+ ;
-typeDecl   : TYPE NAME typeLit ;  // TODO: tag id=NAME, better for adapting (vs., index constants)
+typeDecl   : TYPE id=NAME typeLit ;
 methDecl   : FUNC '(' paramDecl ')' sig '{' RETURN expr '}' ;
-typeLit    : STRUCT '{' fieldDecls? '}'             # StructTypeLit
-           | INTERFACE '{' specs? '}'               # InterfaceTypeLit ;
-//           | primitiveType ; // para type aliases
 fieldDecls : fieldDecl (';' fieldDecl)* ;
-//fieldDecl  : field=NAME typ=NAME ;
-fieldDecl  : field=NAME typeName ;
+fieldDecl  : field=NAME typ ;
 specs      : spec (';' spec)* ;
-spec       : sig                                    # SigSpec
-           | NAME                                   # InterfaceSpec
-           ;
-//sig        : meth=NAME '(' params? ')' ret=NAME ;
-sig        : meth=NAME '(' params? ')' typeName ;
+spec       : (sig | typ) ;
+sig        : meth=NAME '(' params? ')' typ ;
 params     : paramDecl (',' paramDecl)* ;
 //paramDecl  : vari=NAME typ=NAME ;
-paramDecl  : vari=NAME typeName ;
+paramDecl  : vari=NAME typ ;
 expr       : NAME                                   # Variable
            | NAME '{' exprs? '}'                    # StructLit
            | expr '.' NAME                          # Select
            | recv=expr '.' NAME '(' args=exprs? ')' # Call
-           | expr '.' '(' typeName ')'              # Assert
+           | expr '.' '(' typ ')'                   # Assert
            | FMT '.' SPRINTF '(' (STRING | '"%#v"') (',' | expr)* ')'  # Sprintf
            | expr op=(PLUS | MINUS) expr            # BinaryOp
            | expr op=(GT | LT) expr                 # BinaryOp
@@ -116,7 +113,7 @@ expr       : NAME                                   # Variable
            ;
 exprs      : expr (',' expr)* ;
 
-primLit    : lit=(TRUE|FALSE)                     # BoolLit
+primLit    : lit=(TRUE|FALSE)                       # BoolLit
            | lit=INT_LIT                            # IntLit
            | lit=FLOAT_LIT                          # FloatLit
            ; // string, ...

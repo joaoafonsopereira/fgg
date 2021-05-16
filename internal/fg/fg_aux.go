@@ -4,11 +4,25 @@ import "fmt"
 
 var _ = fmt.Errorf
 
+// MethodSet - aux type to represent the result of Methods.
+// Makes it easier/more readable to check for superset relation
+type MethodSet map[Name]Sig
+
+func (m0 MethodSet) IsSupersetOf(m MethodSet) bool {
+	for k, sig := range m {
+		sig0, ok := m0[k]
+		if !ok || !sig.EqExceptVars(sig0) {
+			return false
+		}
+	}
+	return true
+}
+
 /* fields(t_S), methods(t), body(t_S, m) */
 
 // Pre: t_S is a struct type
 func fields(ds []Decl, t_S Type) []FieldDecl {
-	s, ok := getTDecl(ds, t_S).(STypeLit)
+	s, ok := t_S.Underlying(ds).(STypeLit)
 	if !ok {
 		panic("Not a struct type: " + t_S.String())
 	}
@@ -16,26 +30,38 @@ func fields(ds []Decl, t_S Type) []FieldDecl {
 }
 
 // Go has no overloading, meth names are a unique key
-func methods(ds []Decl, t Type) map[Name]Sig {
-	res := make(map[Name]Sig)
-	if isStructType(ds, t) {
-		for _, v := range ds { // Factor out getMDecl?
-			md, ok := v.(MethDecl)
-			if ok && md.recv.t == t {
-				res[md.name] = md.ToSig()
-			}
-		}
-	} else if isInterfaceType(ds, t) {
-		td := getTDecl(ds, t).(ITypeLit)
-		for _, s := range td.specs {
+func methods(ds []Decl, t Type) MethodSet {
+	switch t_cast := t.(type) {
+	case ITypeLit:
+		res := make(MethodSet)
+		for _, s := range t_cast.specs {
 			for _, v := range s.GetSigs(ds) { // cycles? (cf. submission version, recursive "methods")
 				res[v.meth] = v
 			}
 		}
-	} else { // Perhaps redundant if all TDecl OK checked first
-		panic("Unknown type: " + t.String())
+		return res
+
+	case TNamed:
+		// The method set of an interface type is its interface.
+		// The method set of any other TNamed T consists of all methods
+		// declared with receiver type T
+		if t_I, ok := t_cast.Underlying(ds).(ITypeLit); ok {
+			return methods(ds, t_I)
+		} else {
+			res := make(MethodSet)
+			for _, v := range ds {
+				md, ok := v.(MethDecl)
+				if ok && md.recv.t == t_cast {
+					res[md.name] = md.ToSig()
+				}
+			}
+			return res
+		}
+	case TPrimitive, STypeLit:
+		return MethodSet{} // primitives don't implement any methods
+	default:
+		panic("Unknown type: " + t.String()) // Perhaps redundant if all TDecl OK checked first
 	}
-	return res
 }
 
 // Pre: t_S is a struct type
@@ -55,12 +81,12 @@ func body(ds []Decl, t_S Type, m Name) (Name, []Name, FGExpr) {
 
 /* Additional */
 
-func getTDecl(ds []Decl, t Type) TDecl {
+func getTDecl(ds []Decl, t Name) TypeDecl {
 	for _, v := range ds {
-		td, ok := v.(TDecl)
-		if ok && td.GetType() == t {
+		td, ok := v.(TypeDecl)
+		if ok && td.GetName() == t {
 			return td
 		}
 	}
-	panic("Type not found: " + t.String())
+	panic("Type not found: " + t)
 }

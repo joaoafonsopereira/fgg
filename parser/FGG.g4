@@ -65,35 +65,34 @@ FLOAT_LIT       : DIGITS ('.' DIGIT* EXPON? | EXPON)
 // decls, used for sequences: comes out as "helper" Contexts, nodes that group up actual children
 // underneath -- makes "adapting" easier.
 
-typ        : NAME               # TypeParam
-           | NAME '(' typs? ')' # TypeName
-           | name=primType      # TPrimitive
+typ        : name=NAME                              # TypeParam
+           | name=NAME '(' typs? ')'                # TypeName
+           | name=primName                          # TPrimitive
+           | typeLit                                # TypeLit_
            ;
 typs       : typ (',' typ)* ;
-primType   : BOOL
+primName   : BOOL
            | INT32   | INT64
            | FLOAT32 | FLOAT64
            ;
+typeLit    : STRUCT '{' fieldDecls? '}'	            # StructTypeLit
+	       | INTERFACE '{' specs? '}'	            # InterfaceTypeLit
+	       ;
 typeFormals: '(' TYPE typeFDecls? ')' ; // Refactored "(...)" into here
-typeFDecls : typeFDecl (',' typeFDecl)*;
-typeFDecl  : NAME typ; // CHECKME: #TypeName ?
+typeFDecls : typeFDecl (',' typeFDecl)* ;
+typeFDecl  : NAME typ ;
 program    : PACKAGE MAIN ';'
              (IMPORT STRING ';')?
              decls? FUNC MAIN '(' ')' '{'
                 ( '_' '=' expr | FMT '.' PRINTF '(' '"%#v"' ',' expr ')' )
              '}' EOF ;
 decls      : ((typeDecl | methDecl) ';')+ ;
-typeDecl   : TYPE id=NAME typeFormals typeLit ;
+typeDecl   : TYPE id=NAME typeFormals typ ;
 methDecl   : FUNC '(' recv = NAME typn = NAME typeFormals ')' sig '{' RETURN expr '}' ;
-typeLit    : STRUCT '{' fieldDecls? '}'	            # StructTypeLit
-	       | INTERFACE '{' specs? '}'	            # InterfaceTypeLit
-	       ;
 fieldDecls : fieldDecl (';' fieldDecl)*;
 fieldDecl  : field = NAME typ;
 specs      : spec (';' spec)*;
-spec       : sig		                            # SigSpec
-           | typ	                                # InterfaceSpec // Must be a #TypeName, \tau_I -- refactor?
-           ;
+spec       : (sig | typ) ;
 sig        : meth = NAME typeFormals '(' params? ')' typ;
 params     : paramDecl (',' paramDecl)*;
 paramDecl  : vari = NAME typ;

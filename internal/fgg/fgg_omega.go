@@ -295,12 +295,13 @@ func auxE1(ds []Decl, omega Omega) bool {
 	res := false
 	tmp := make(map[string]TNamed)
 	for _, u := range omega.us {
-		if !isNamedIfaceType(ds, u) {
+		if !isNamedIfaceType(ds, u) {  // TODO pôr função que faz esta verificação a retornar logo u_I, td_I
 			continue
 		}
-		td_I := getTDecl(ds, u.t_name).(ITypeLit)
+		u_I := u.Underlying(ds).(ITypeLit)
+		td_I := getTDecl(ds, u.t_name)
 		eta := MakeEta(td_I.Psi, u.u_args)
-		for _, s := range td_I.specs {
+		for _, s := range u_I.specs {
 			if u_emb, ok := s.(TNamed); ok {
 				u_sub := u_emb.SubsEta(eta)
 				tmp[toKey_Wt(u_sub)] = u_sub
@@ -324,9 +325,10 @@ func auxE2(ds []Decl, omega Omega) bool {
 		if !isNamedIfaceType(ds, m.u_recv) {
 			continue
 		}
-		td_I := getTDecl(ds, m.u_recv.t_name).(ITypeLit)
+		u_I := m.u_recv.Underlying(ds).(ITypeLit)
+		td_I := getTDecl(ds, m.u_recv.t_name)
 		eta := MakeEta(td_I.Psi, m.u_recv.u_args)
-		for _, s := range td_I.specs {
+		for _, s := range u_I.specs {
 			if u_emb, ok := s.(TNamed); ok {
 				u_sub := u_emb.SubsEta(eta)
 				gs := methods(ds, u_sub)

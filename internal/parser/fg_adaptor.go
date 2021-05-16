@@ -61,7 +61,7 @@ func (a *FGAdaptor) Parse(strictParse bool, input string) base.Program {
 	return a.pop().(fg.FGProgram)
 }
 
-/* #TNamed ("typeName"), #TPrimitive ("typeName") */
+/* "typ": #TNamed, #TPrimitive, #TypeLit_ */
 
 func (a *FGAdaptor) ExitTNamed(ctx *parser.TNamedContext) {
 	tname := fg.TNamed(ctx.GetName().GetText())
@@ -71,6 +71,41 @@ func (a *FGAdaptor) ExitTNamed(ctx *parser.TNamedContext) {
 func (a *FGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
 	tag := fg.TagFromName(ctx.GetName().GetText())
 	a.push(fg.NewTPrimitive(tag, false))
+}
+
+func (a *FGAdaptor) ExitTypeLit_(ctx *parser.TypeLit_Context) {
+	// do nothing -- the struct/interface literal is already at top of a.stack
+	// cf. ExitStructTypeLit
+}
+
+/* "typeLit": #StructTypeLit, #InterfaceTypeLit */
+
+// Children: 2=fieldDecls
+func (a *FGAdaptor) ExitStructTypeLit(ctx *parser.StructTypeLitContext) {
+	fds := []fg.FieldDecl{}
+	if ctx.GetChildCount() > 3 {
+		nfds := (ctx.GetChild(2).GetChildCount() + 1) / 2 // fieldDecl (';' fieldDecl)*
+		fds = make([]fg.FieldDecl, nfds)
+		for i := nfds - 1; i >= 0; i-- {
+			fd := a.pop().(fg.FieldDecl)
+			fds[i] = fd // Adding backwards
+		}
+	}
+	a.push(fg.NewSTypeLit(fds)) // "^" to be overwritten in ExitTypeDecl
+}
+
+// Cf. ExitStructTypeLit
+func (a *FGAdaptor) ExitInterfaceTypeLit(ctx *parser.InterfaceTypeLitContext) {
+	ss := []fg.Spec{}
+	if ctx.GetChildCount() > 3 {
+		nss := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., s ';' s ';' s
+		ss = make([]fg.Spec, nss)
+		for i := nss - 1; i >= 0; i-- {
+			s := a.pop().(fg.Spec)
+			ss[i] = s // Adding backwards
+		}
+	}
+	a.push(fg.NewITypeLit(ss)) // "^" to be overwritten in ExitTypeDecl
 }
 
 /* "program" */
@@ -109,36 +144,12 @@ func (a *FGAdaptor) ExitProgram(ctx *parser.ProgramContext) {
 
 // Children: 1=NAME, 2=typeLit
 func (a *FGAdaptor) ExitTypeDecl(ctx *parser.TypeDeclContext) {
-	t := fg.TNamed(ctx.GetChild(1).(*antlr.TerminalNodeImpl).GetText())
-	td := a.pop().(fg.TDecl)
-	if s, ok := td.(fg.STypeLit); ok { // N.B. s is a *copy* of td
-		/*s.t_S = t
-		a.push()*/
-		a.push(fg.NewSTypeLit(t, s.GetFieldDecls()))
-	} else if c, ok := td.(fg.ITypeLit); ok {
-		/*c.t_I = t
-		a.push(c)*/
-		a.push(fg.NewITypeLit(t, c.GetSpecs()))
-	} else {
-		panic(testutils.PARSER_PANIC_PREFIX + "Unknown type decl: " + reflect.TypeOf(td).String())
-	}
+	name := fg.Name(ctx.GetId().GetText())
+	src := a.pop().(fg.Type)
+	a.push(fg.NewTypeDecl(name, src))
 }
 
-/* #StructTypeLit ("typeLit"), "fieldDecls", "fieldDecl" */
-
-// Children: 2=fieldDecls
-func (a *FGAdaptor) ExitStructTypeLit(ctx *parser.StructTypeLitContext) {
-	fds := []fg.FieldDecl{}
-	if ctx.GetChildCount() > 3 {
-		nfds := (ctx.GetChild(2).GetChildCount() + 1) / 2 // fieldDecl (';' fieldDecl)*
-		fds = make([]fg.FieldDecl, nfds)
-		for i := nfds - 1; i >= 0; i-- {
-			fd := a.pop().(fg.FieldDecl)
-			fds[i] = fd // Adding backwards
-		}
-	}
-	a.push(fg.NewSTypeLit("^", fds)) // "^" to be overwritten in ExitTypeDecl
-}
+/* "fieldDecls", "fieldDecl" */
 
 func (a *FGAdaptor) ExitFieldDecl(ctx *parser.FieldDeclContext) {
 	f := fg.Name(ctx.GetField().GetText())
@@ -164,30 +175,7 @@ func (a *FGAdaptor) ExitParamDecl(ctx *parser.ParamDeclContext) {
 	a.push(fg.NewParamDecl(x, t))
 }
 
-/* #InterfaceTypeLit ("typeLit"), "specs", #SigSpec ("spec"), #InterfaceSpec ("spec"), "sig" */
-
-// Cf. ExitStructTypeLit
-func (a *FGAdaptor) ExitInterfaceTypeLit(ctx *parser.InterfaceTypeLitContext) {
-	ss := []fg.Spec{}
-	if ctx.GetChildCount() > 3 {
-		nss := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., s ';' s ';' s
-		ss = make([]fg.Spec, nss)
-		for i := nss - 1; i >= 0; i-- {
-			s := a.pop().(fg.Spec)
-			ss[i] = s // Adding backwards
-		}
-	}
-	a.push(fg.NewITypeLit("^", ss)) // "^" to be overwritten in ExitTypeDecl
-}
-
-func (a *FGAdaptor) ExitSigSpec(ctx *parser.SigSpecContext) {
-	// No action -- Sig is at a.stack[len(a.stack)-1]
-}
-
-func (a *FGAdaptor) ExitInterfaceSpec(ctx *parser.InterfaceSpecContext) {
-	t := fg.TNamed(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
-	a.push(t)
-}
+/* "sig" */
 
 func (a *FGAdaptor) ExitSig(ctx *parser.SigContext) {
 	m := ctx.GetMeth().GetText()
