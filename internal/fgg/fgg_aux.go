@@ -2,7 +2,7 @@ package fgg
 
 import (
 	"fmt"
-	"reflect"
+	"strconv"
 )
 
 var _ = fmt.Errorf
@@ -13,6 +13,20 @@ func Bounds(delta Delta, u Type) Type          { return bounds(delta, u) }
 func Fields(ds []Decl, u_S TNamed) []FieldDecl { return fields(ds, u_S) }
 func Methods(ds []Decl, u Type) map[Name]Sig   { return methods(ds, u) }
 func GetTDecl(ds []Decl, t Name) TypeDecl      { return getTDecl(ds, t) }
+
+// MethodSet - aux type to represent the result of Methods.
+// Makes it easier/more readable to check for superset relation
+type MethodSet map[Name]Sig
+
+func (m0 MethodSet) IsSupersetOf(m MethodSet) bool {
+	for k, g := range m {
+		g0, ok := m0[k]
+		if !ok || !sigAlphaEquals(g0, g) {
+			return false
+		}
+	}
+	return true
+}
 
 /* bounds(delta, u), fields(u_S), methods(u), body(u_S, m) */
 
@@ -28,87 +42,76 @@ func bounds(delta Delta, u Type) Type {
 
 // Pre: len(s.psi.as) == len (u_S.typs), where s is the STypeLit decl for u_S.t
 func fields(ds []Decl, u_S TNamed) []FieldDecl {
-	s, ok := getTDecl(ds, u_S.t_name).(STypeLit)
+	s, ok := u_S.Underlying(ds).(STypeLit)
 	if !ok {
 		panic("Not a struct type: " + u_S.String())
 	}
-	subs := make(map[TParam]Type) // Cf. MakeEta
-	for i := 0; i < len(s.Psi.tFormals); i++ {
-		subs[s.Psi.tFormals[i].name] = u_S.u_args[i]
-	}
+
+	decl := getTDecl(ds, u_S.t_name)
+	subs := MakeTSubs(decl.Psi, u_S.u_args)
 	fds := make([]FieldDecl, len(s.fDecls))
 	for i := 0; i < len(s.fDecls); i++ {
-		fds[i] = s.fDecls[i].Subs(subs)
+		fds[i] = s.fDecls[i].TSubs(subs)
 	}
 	return fds
 }
 
 // Go has no overloading, meth names are a unique key
-func methods(ds []Decl, u Type) map[Name]Sig { // CHECKME: deprecate?
+func methods(ds []Decl, u Type) MethodSet { // CHECKME: deprecate?
 	return methodsDelta(ds, make(Delta), u)
 }
 
 // TODO FIXME refactor
-func MethodsDelta1(ds []Decl, delta Delta, u Type) map[Name]Sig {
+func MethodsDelta1(ds []Decl, delta Delta, u Type) MethodSet {
 	return methodsDelta(ds, delta, u)
 }
 
-func methodsDelta(ds []Decl, delta Delta, u Type) map[Name]Sig {
-	res := make(map[Name]Sig)
-	if IsStructType(ds, u) {
-		for _, v := range ds {
-			md, ok := v.(MethDecl)
-			if ok && isStructName(ds, md.t_recv) {
-				//sd := md.recv.u.(TName)
-				u_S := u.(TNamed)
-				if md.t_recv == u_S.t_name {
-					/*subs := make(map[TParam]Type)                    // Cf. MakeEta
-					for i := 0; i < len(md.Psi_recv.tFormals); i++ { // TODO: md.Psi_recv.ToDelta
-						subs[md.Psi_recv.tFormals[i].name] = u_S.u_args[i]
-					}
-					//for i := 0; i < len(md.psi.tfs); i++ { // CHECKME: because TParam.TSubs will panic o/w -- refactor?
-					//	subs[md.psi.tfs[i].a] = md.psi.tfs[i].a
-					//}
-					res[md.name] = md.ToSig().TSubs(subs)*/
-					if ok, eta := MakeEtaDelta(ds, delta, md.Psi_recv, u_S.u_args); ok {
+func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
+	switch u_cast := u.(type) {
+	case ITypeLit:
+		res := make(MethodSet)
+		for _, s := range u_cast.specs {
+			for _, v := range s.GetSigs(ds) {
+				res[v.meth] = v
+			}
+		}
+		return res
+
+	case TNamed:
+		// The method set of an interface type is its interface.
+		// The method set of any other TNamed T consists of all methods
+		// declared with receiver type T
+		if u_I, ok := u_cast.Underlying(ds).(ITypeLit); ok {
+			td := getTDecl(ds, u_cast.t_name)
+			subs := MakeTSubs(td.Psi, u_cast.u_args)
+			return methodsDelta(ds, delta, u_I.TSubs(subs))
+		} else {
+			res := make(MethodSet)
+			for _, v := range ds {
+				md, ok := v.(MethDecl)
+				if ok && md.t_recv == u_cast.t_name {
+					if ok, eta := MakeEtaDelta(ds, delta, md.Psi_recv, u_cast.u_args); ok {
 						res[md.name] = md.ToSig().TSubs(eta)
 					}
 				}
 			}
+			return res
 		}
-	} else if IsNamedIfaceType(ds, u) { // N.B. u is a TName, \tau_I (not a TParam)
-		u_I := u.(TNamed)
-		td := getTDecl(ds, u_I.t_name).(ITypeLit)
-		subs := make(map[TParam]Type) // Cf. MakeEta
-		for i := 0; i < len(td.Psi.tFormals); i++ {
-			subs[td.Psi.tFormals[i].name] = u_I.u_args[i]
-		}
-		for _, s := range td.specs {
-			/*for _, v := range s.GetSigs(ds) {
-				res[v.m] = v
-			}*/
-			switch s1 := s.(type) {
-			case Sig:
-				res[s1.meth] = s1.TSubs(subs)
-			case TNamed: // Embedded u_I
-				for k, v := range methods(ds, s1.TSubs(subs)) { // cycles? (cf. submission version)
-					res[k] = v
-				}
-			default:
-				panic("Unknown Spec kind: " + reflect.TypeOf(s).String())
-			}
-		}
-	} else if cast, ok := u.(TParam); ok {
-		upper, ok := delta[cast]
+
+	case TParam:
+		upper, ok := delta[u_cast]
 		if !ok {
-			panic("Unknown type: " + u.String())
+			panic("TParam: " + u.String() + " not in env: " + delta.String())
 		}
-		//return methodsDelta(ds, delta, bounds(delta, cast)) // !!! delegate to bounds
+		//return methodsDelta(ds, delta, bounds(delta, u_cast)) // !!! delegate to bounds
 		return methodsDelta(ds, delta, upper)
-	} else {
+
+	case TPrimitive, STypeLit:
+		return MethodSet{} // primitives don't implement any methods
+
+	default:
 		panic("Unknown type: " + u.String()) // Perhaps redundant if all TDecl OK checked first
 	}
-	return res
 }
 
 // Pre: t_S is a struct type
@@ -148,4 +151,43 @@ func getTDecl(ds []Decl, t Name) TypeDecl {
 		}
 	}
 	panic("Type not found: " + t)
+}
+
+// !!! Sig in FGG includes ~a and ~x, which naively breaks "impls"
+func sigAlphaEquals(g0 Sig, g Sig) bool {
+	if len(g0.Psi.tFormals) != len(g.Psi.tFormals) || len(g0.pDecls) != len(g.pDecls) {
+		return false
+	}
+	subs0 := makeParamIndexSubs(g0.Psi)
+	subs := makeParamIndexSubs(g.Psi)
+	for i := 0; i < len(g0.Psi.tFormals); i++ {
+		if !g0.Psi.tFormals[i].u_I.TSubs(subs0).
+			Equals(g.Psi.tFormals[i].u_I.TSubs(subs)) {
+			//fmt.Println("z:")
+			return false
+		}
+	}
+	for i := 0; i < len(g0.pDecls); i++ {
+		if !g0.pDecls[i].u.TSubs(subs0).Equals(g.pDecls[i].u.TSubs(subs)) {
+			/*fmt.Println("w1: ", g0.pDecls[i].u, g0.pDecls[i].u.TSubs(subs0))
+			fmt.Println("w2: ", g.pDecls[i].u, g.pDecls[i].u.TSubs(subs))
+			fmt.Println("y:")*/
+			return false
+		}
+	}
+	/*fmt.Println("1:", g0)
+	fmt.Println("2:", g)
+	fmt.Println("3:", g0.meth == g.meth, g0.u_ret.Equals(g.u_ret))
+	fmt.Println("4:", g0.u_ret.TSubs(subs0).Equals(g.u_ret.TSubs(subs)))*/
+	return g0.meth == g.meth && g0.u_ret.TSubs(subs0).Equals(g.u_ret.TSubs(subs))
+}
+
+// CHECKME: Used by sigAlphaEquals, and MDecl.OK (for covariant receiver bounds)
+func makeParamIndexSubs(Psi BigPsi) Delta {
+	subs := make(Delta)
+	for j := 0; j < len(Psi.tFormals); j++ {
+		//subs[Psi.tFormals[j].name] = Psi.tFormals[j].name
+		subs[Psi.tFormals[j].name] = TParam("α" + strconv.Itoa(j+1))
+	}
+	return subs
 }

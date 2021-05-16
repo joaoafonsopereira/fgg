@@ -61,15 +61,17 @@ func (a *FGGAdaptor) Parse(strictParse bool, input string) base.Program {
 	return a.pop().(fgg.FGGProgram)
 }
 
-/* #Typeparam ("typ"), #TypeName ("typ"), #TPrimitive ("typ"), "typeFormals", "typeFDecls", "typeFDecl" */
+/* "typ": #TypeParam, #TypeName, #TPrimitive, #TypeLit_ */
 
 func (a *FGGAdaptor) ExitTypeParam(ctx *parser.TypeParamContext) {
-	b := fgg.TParam(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
+	b := fgg.TParam(ctx.GetName().GetText())
 	a.push(b)
 }
 
 func (a *FGGAdaptor) ExitTypeName(ctx *parser.TypeNameContext) {
-	t := fgg.Name(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
+	//t := fgg.Name(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
+	// TODO check if changing to .GetName doesn't alter the ChildCount below
+	t := fgg.Name(ctx.GetName().GetText())
 	us := []fgg.Type{}
 	if ctx.GetChildCount() > 3 { // typs "helper" Context, cf. exprs
 		nus := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., u1 ',' u2 ',' u3
@@ -86,6 +88,43 @@ func (a *FGGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
 	tag := fgg.TagFromName(ctx.GetName().GetText())
 	a.push(fgg.NewTPrimitive(tag, false))
 }
+
+func (a *FGGAdaptor) ExitTypeLit_(ctx *parser.TypeLit_Context) {
+	// do nothing -- the struct/interface literal is already at top of a.stack
+	// cf. ExitStructTypeLit
+}
+
+/* #StructTypeLit ("typeLit"), #InterfaceTypeLit ("typeLit") */
+
+// Children: 2=fieldDecls
+func (a *FGGAdaptor) ExitStructTypeLit(ctx *parser.StructTypeLitContext) {
+	fds := []fgg.FieldDecl{}
+	if ctx.GetChildCount() > 3 {
+		nfds := (ctx.GetChild(2).GetChildCount() + 1) / 2 // fieldDecl (';' fieldDecl)*
+		fds = make([]fgg.FieldDecl, nfds)
+		for i := nfds - 1; i >= 0; i-- {
+			fd := a.pop().(fgg.FieldDecl)
+			fds[i] = fd // Adding backwards
+		}
+	}
+	a.push(fgg.NewSTypeLit(fds))
+}
+
+// Cf. ExitStructTypeLit
+func (a *FGGAdaptor) ExitInterfaceTypeLit(ctx *parser.InterfaceTypeLitContext) {
+	specs := []fgg.Spec{}
+	if ctx.GetChildCount() > 3 {
+		nss := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., s ';' s ';' s
+		specs = make([]fgg.Spec, nss)
+		for i := nss - 1; i >= 0; i-- {
+			s := a.pop().(fgg.Spec)
+			specs[i] = s // Adding backwards
+		}
+	}
+	a.push(fgg.NewITypeLit(specs))
+}
+
+/* "typeFormals", "typeFDecls", "typeFDecl" */
 
 func (a *FGGAdaptor) ExitTypeFormals(ctx *parser.TypeFormalsContext) {
 	tfs := []fgg.TFormal{}
@@ -142,39 +181,13 @@ func (a *FGGAdaptor) ExitProgram(ctx *parser.ProgramContext) {
 
 // Children: 1=NAME, 2=typeFormals, 3=typeLit
 func (a *FGGAdaptor) ExitTypeDecl(ctx *parser.TypeDeclContext) {
-	t := fgg.Name(ctx.GetId().GetText())
-	td := a.pop().(fgg.TypeDecl)
+	name := fgg.Name(ctx.GetId().GetText())
+	src := a.pop().(fgg.Type)
 	psi := a.pop().(fgg.BigPsi)
-	if s, ok := td.(fgg.STypeLit); ok { // N.B. s is a *copy* of td
-		/*s.t_name = t
-		s.Psi = psi
-		a.push(s)*/
-		a.push(fgg.NewSTypeLit(t, psi, s.GetFieldDecls()))
-	} else if c, ok := td.(fgg.ITypeLit); ok {
-		/*c.t_I = t
-		c.Psi = psi
-		a.push(c)*/
-		a.push(fgg.NewITypeLit(t, psi, c.GetSpecs()))
-	} else {
-		panic(testutils.PARSER_PANIC_PREFIX + "Unknown type decl: " + reflect.TypeOf(td).String())
-	}
+	a.push(fgg.NewTypeDecl(name, psi, src))
 }
 
-/* #StructTypeLit ("typeLit"), "fieldDecls", "fieldDecl" */
-
-// Children: 2=fieldDecls
-func (a *FGGAdaptor) ExitStructTypeLit(ctx *parser.StructTypeLitContext) {
-	fds := []fgg.FieldDecl{}
-	if ctx.GetChildCount() > 3 {
-		nfds := (ctx.GetChild(2).GetChildCount() + 1) / 2 // fieldDecl (';' fieldDecl)*
-		fds = make([]fgg.FieldDecl, nfds)
-		for i := nfds - 1; i >= 0; i-- {
-			fd := a.pop().(fgg.FieldDecl)
-			fds[i] = fd // Adding backwards
-		}
-	}
-	a.push(fgg.NewSTypeLit("^", fgg.BigPsi{}, fds)) // "^" and TFormals{} to be overwritten in ExitTypeDecl
-}
+/* "fieldDecls", "fieldDecl" */
 
 func (a *FGGAdaptor) ExitFieldDecl(ctx *parser.FieldDeclContext) {
 	f := fgg.Name(ctx.GetField().GetText())
@@ -202,35 +215,7 @@ func (a *FGGAdaptor) ExitParamDecl(ctx *parser.ParamDeclContext) {
 	a.push(fgg.NewParamDecl(x, u))
 }
 
-/* #InterfaceTypeLit ("typeLit"), "specs", #SigSpec ("spec"), #InterfaceSpec ("spec"), "sig" */
-
-// Cf. ExitStructTypeLit
-func (a *FGGAdaptor) ExitInterfaceTypeLit(ctx *parser.InterfaceTypeLitContext) {
-	ss := []fgg.Spec{}
-	if ctx.GetChildCount() > 3 {
-		nss := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., s ';' s ';' s
-		ss = make([]fgg.Spec, nss)
-		for i := nss - 1; i >= 0; i-- {
-			s := a.pop().(fgg.Spec)
-			ss[i] = s // Adding backwards
-		}
-	}
-	a.push(fgg.NewITypeLit("^", fgg.BigPsi{}, ss)) // "^" and TFormals{} to be overwritten in ExitTypeDecl
-}
-
-func (a *FGGAdaptor) ExitSigSpec(ctx *parser.SigSpecContext) {
-	// No action -- Sig is at a.stack[len(a.stack)-1]
-}
-
-func (a *FGGAdaptor) ExitInterfaceSpec(ctx *parser.InterfaceSpecContext) {
-	popped := a.pop()
-	cast, ok := popped.(fgg.TNamed)
-	if !ok {
-		panic(testutils.PARSER_PANIC_PREFIX + "Expected TNamed, not: " + reflect.TypeOf(popped).String() +
-			"\n\t" + popped.String())
-	}
-	a.push(cast) // Check TName (should specifically be a \tau_I) -- CHECKME: enforce in BNF?
-}
+/* "sig" */
 
 func (a *FGGAdaptor) ExitSig(ctx *parser.SigContext) {
 	m := ctx.GetMeth().GetText()
