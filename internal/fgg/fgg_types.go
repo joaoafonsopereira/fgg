@@ -254,8 +254,16 @@ func (u TNamed) ToGoString(ds []Decl) string {
 }
 
 func (u TNamed) Underlying(ds []Decl) Type {
+	if u.Equals(STRING_TYPE_MONOM) { // TODO quick fix remove this <---------------
+		return u
+	}
 	decl := getTDecl(ds, u.t_name)
-	return decl.GetSourceType().Underlying(ds)
+	under := decl.GetSourceType().Underlying(ds)
+	// the underlying type itself may have type variables, as in e.g.
+	// type S[T any] struct { x T }
+	//  -> the underlying of S[int] is struct { x int }, hence the TSubs
+	subs := MakeTSubs(decl.Psi, u.u_args)
+	return under.TSubs(subs)
 }
 
 /******************************************************************************/

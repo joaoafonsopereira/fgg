@@ -161,7 +161,7 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, e FGGExpr, omega Nomeg
 		for k, v := range gamma {
 			gamma1[k] = v
 		}
-		u_recv := e1.e_recv.Typing(ds, delta, gamma1, false)
+		u_recv, _ := e1.e_recv.Typing(ds, delta, gamma1, false)
 		k_t := tokeyWtOpen(u_recv)
 		if _, ok := omega.us[k_t]; !ok {
 			omega.us[k_t] = u_recv
@@ -644,7 +644,7 @@ func buildGraphExpr(ds []Decl, delta Delta, gamma Gamma, curr RecvMethPair, e1 F
 		for _, arg := range e.args {
 			buildGraphExpr(ds, delta, gamma, curr, arg, graph)
 		}
-		u_recv := e.e_recv.Typing(ds, delta, gamma, true)
+		u_recv, _ := e.e_recv.Typing(ds, delta, gamma, true)
 
 		if isStructType(ds, u_recv) { // u_recv is a TNamed struct
 			u_S := u_recv.(TNamed)
@@ -655,17 +655,17 @@ func buildGraphExpr(ds []Decl, delta Delta, gamma Gamma, curr RecvMethPair, e1 F
 			if _, ok := u_I.(TParam); ok {
 				u_I = u_I.TSubs(delta) // CHECKME
 			}
-			for _, v := range ds {
-				if d, ok := v.(STypeLit); ok {
-
-					// method set unification instead of basic impls? -- or using bounds (hat) sufficient?
-					u_S := TNamed{d.t_name, d.Psi.Hat()} // !!!
-					if u_S.ImplsDelta(ds, delta, u_I) {
-						putTArgs(graph, curr, u_S, e.meth, e.t_args)
-					}
-
-				}
-			}
+			//for _, v := range ds {
+			//	if d, ok := v.(STypeLit); ok {
+			//
+			//		// method set unification instead of basic impls? -- or using bounds (hat) sufficient?
+			//		u_S := TNamed{d.t_name, d.Psi.Hat()} // !!!
+			//		if u_S.ImplsDelta(ds, delta, u_I) {
+			//			putTArgs(graph, curr, u_S, e.meth, e.t_args)
+			//		}
+			//
+			//	}
+			//}
 		}
 	case Assert:
 		buildGraphExpr(ds, delta, gamma, curr, e.e_I, graph)

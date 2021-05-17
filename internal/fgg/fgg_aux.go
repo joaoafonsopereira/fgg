@@ -41,6 +41,8 @@ func bounds(delta Delta, u Type) Type {
 }
 
 // Pre: len(s.psi.as) == len (u_S.typs), where s is the STypeLit decl for u_S.t
+
+// TODO IS THIS FUNCTION NEEDED? THE TYPE SUBS is already being applied in u_S.Underlying()
 func fields(ds []Decl, u_S TNamed) []FieldDecl {
 	s, ok := u_S.Underlying(ds).(STypeLit)
 	if !ok {
@@ -83,7 +85,7 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 		// declared with receiver type T
 		if u_I, ok := u_cast.Underlying(ds).(ITypeLit); ok {
 			td := getTDecl(ds, u_cast.t_name)
-			subs := MakeTSubs(td.Psi, u_cast.u_args)
+			subs := MakeTSubs(td.Psi, u_cast.u_args) // TODO problem: now this TSubs is already being done in Underlying. Where should it be??
 			return methodsDelta(ds, delta, u_I.TSubs(subs))
 		} else {
 			res := make(MethodSet)
