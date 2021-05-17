@@ -19,7 +19,7 @@ var _ = fmt.Errorf
 func ToMonomId(u Type) fg.Type {
 	if a, ok := u.(TParam); ok {
 		if _, foo := PRIMITIVE_TYPES[a]; foo {
-			return fg.Type(string(a))
+			return fg.TNamed(string(a))
 		}
 	}
 	return toMonomId(u.(TNamed))
@@ -34,7 +34,7 @@ func MonomExpr(e FGGExpr) fg.FGExpr {
 // All m (MethInstan.meth) belong to the same t (MethInstan.u_recv.t_name)
 type Mu map[string]MethInstan // Cf. Omega, toKey_Wm
 
-var empty_I = fg.Type("Top") // !!!
+var empty_I = fg.TNamed("Top") // !!!
 //var empty_S = fg.Type("Empty")
 
 /* Monomorph: FGGProgram -> FGProgram */
@@ -66,14 +66,14 @@ func ApplyOmega(p FGGProgram, omega Omega) fg.FGProgram {
 	}
 	e_monom := monomExpr1(p.e_main, make(Eta))
 	//ds_monom = append(ds_monom, fg.NewSTypeLit(empty_S, []fg.FieldDecl{}))
-	ds_monom = append(ds_monom, fg.NewITypeLit(empty_I, []fg.Spec{}))
+	ds_monom = append(ds_monom, fg.NewTypeDecl(empty_I.GetName(), fg.ITypeLit{})) // TODO THIS IS JUST A QUICK FIX
 	return fg.NewFGProgram(ds_monom, e_monom, p.printf)
 }
 
-func monomTDecl1(ds []Decl, omega Omega, td TypeDecl) []fg.TDecl {
-	var res []fg.TDecl
+func monomTDecl1(ds []Decl, omega Omega, td TypeDecl) []fg.TypeDecl {
+	var res []fg.TypeDecl
+	t := td.GetName()
 	for _, u := range omega.us {
-		t := td.GetName()
 		if u.t_name == t {
 			eta := MakeEta(td.GetBigPsi(), u.u_args)
 			mu := make(Mu)
@@ -84,21 +84,32 @@ func monomTDecl1(ds []Decl, omega Omega, td TypeDecl) []fg.TDecl {
 				}
 			}
 			t_monom := toMonomId(u)
-			switch cast := td.(type) {
-			case STypeLit:
-				res = append(res, monomSTypeLit1(t_monom, cast, eta))
-			case ITypeLit:
-				res = append(res, monomITypeLit1(t_monom, cast, eta, mu))
-			default:
-				panic("Unknown TDecl kind: " + reflect.TypeOf(td).String() +
-					"\n\t" + td.String())
-			}
+			src_monom := monomType(td.GetSourceType(), eta, mu)
+			td_monom := fg.NewTypeDecl(t_monom.String(), src_monom) // TODO maybe toMonomId should just return a Name to avoid the 'conversion' t_monom.String()
+			res = append(res, td_monom)
 		}
 	}
 	return res
 }
 
-func monomSTypeLit1(t_monom fg.Type, s STypeLit, eta Eta) fg.STypeLit {
+func monomType(fgg_type Type, eta Eta, mu Mu) fg.Type {
+	switch t := fgg_type.(type) {
+	case STypeLit:
+		return monomSTypeLit1(t, eta)
+	case ITypeLit:
+		return monomITypeLit1(t, eta, mu)
+	case TPrimitive:
+		return fg.NewTPrimitive(fg.Tag(t.tag), t.undefined) // t.undefined should always be false
+	default:
+		panic("Couldn't monomorphise the type " + t.String())
+	//case TNamed:  TODO complete these cases <<<<<<<<<<-------------------------------------------------------------------------
+	//
+	//case TParam:
+	//
+	}
+}
+
+func monomSTypeLit1(s STypeLit, eta Eta) fg.STypeLit {
 	fds := make([]fg.FieldDecl, len(s.fDecls))
 	for i := 0; i < len(s.fDecls); i++ {
 		fd := s.fDecls[i]
@@ -106,10 +117,10 @@ func monomSTypeLit1(t_monom fg.Type, s STypeLit, eta Eta) fg.STypeLit {
 		f_monom := toMonomId(u_f)
 		fds[i] = fg.NewFieldDecl(fd.field, f_monom)
 	}
-	return fg.NewSTypeLit(t_monom, fds)
+	return fg.NewSTypeLit(fds)
 }
 
-func monomITypeLit1(t_monom fg.Type, c ITypeLit, eta Eta, mu Mu) fg.ITypeLit {
+func monomITypeLit1(c ITypeLit, eta Eta, mu Mu) fg.ITypeLit {
 	var ss []fg.Spec
 	pds_empty := []fg.ParamDecl{}
 	subs := make(Delta) // TODO: refactor -- because of Sig.TSubs
@@ -134,14 +145,14 @@ func monomITypeLit1(t_monom fg.Type, c ITypeLit, eta Eta, mu Mu) fg.ITypeLit {
 			ss = append(ss, hash)
 		case TNamed: // Embedded
 			u_I := s.SubsEta(eta)
-			emb_monom := toMonomId(u_I)
+			emb_monom := toMonomId(u_I).(fg.TNamed) // TODO check this cast <<--------
 			ss = append(ss, emb_monom)
 		default:
 			panic("Unknown Spec kind: " + reflect.TypeOf(v).String() +
 				"\n\t" + v.String())
 		}
 	}
-	return fg.NewITypeLit(t_monom, ss)
+	return fg.NewITypeLit(ss)
 }
 
 func monomSig1(g Sig, m MethInstan, eta Eta) fg.Sig {
@@ -240,6 +251,7 @@ func monomExpr1(e1 FGGExpr, eta Eta) fg.FGExpr {
 
 /* Helpers */
 
+// TODO Mudar aqui, em vez de receber um TNamed pode receber p.ex um GroundType ?
 func toMonomId(u TNamed) fg.Type {
 	if u.Equals(STRING_TYPE_MONOM) { // HACK
 		return fg.STRING_TYPE
@@ -249,7 +261,7 @@ func toMonomId(u TNamed) fg.Type {
 	res = strings.Replace(res, "(", "<", -1)
 	res = strings.Replace(res, ")", ">", -1)
 	res = strings.Replace(res, " ", "", -1)
-	return fg.Type(res)
+	return fg.TNamed(res)
 }
 
 /*// Pre: len(targs) > 0

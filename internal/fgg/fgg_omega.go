@@ -300,7 +300,7 @@ func auxE1(ds []Decl, omega Omega) bool {
 		}
 		u_I := u.Underlying(ds).(ITypeLit)
 		td_I := getTDecl(ds, u.t_name)
-		eta := MakeEta(td_I.Psi, u.u_args)
+		eta := MakeEta(td_I.Psi, u.u_args) //  TODO IS THIS SUBS NECESSARY AFTER Underlying() ?
 		for _, s := range u_I.specs {
 			if u_emb, ok := s.(TNamed); ok {
 				u_sub := u_emb.SubsEta(eta)
@@ -325,7 +325,7 @@ func auxE2(ds []Decl, omega Omega) bool {
 		if !isNamedIfaceType(ds, m.u_recv) {
 			continue
 		}
-		u_I := m.u_recv.Underlying(ds).(ITypeLit)
+		u_I := m.u_recv.Underlying(ds).(ITypeLit) // TODO IS THIS SUBS NEEDED? OR IS IT ALREADY BEING APPLIED IN Underlying()?
 		td_I := getTDecl(ds, m.u_recv.t_name)
 		eta := MakeEta(td_I.Psi, m.u_recv.u_args)
 		for _, s := range u_I.specs {
