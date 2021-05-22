@@ -15,12 +15,10 @@ var _ = strconv.AppendBool
 
 /* Export */
 
-func NewTName(t Name, us []Type) TNamed          { return TNamed{t, us} }
 func IsStructType(ds []Decl, u Type) bool        { return isStructType(ds, u) }
 func IsNamedIfaceType(ds []Decl, u Type) bool    { return isNamedIfaceType(ds, u) }
 func NewTFormal(name TParam, u_I Type) TFormal   { return TFormal{name, u_I} }
 func NewBigPsi(tFormals []TFormal) BigPsi        { return BigPsi{tFormals} }
-func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
 
 /* Constants */
 

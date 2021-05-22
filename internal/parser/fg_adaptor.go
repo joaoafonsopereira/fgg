@@ -64,7 +64,7 @@ func (a *FGAdaptor) Parse(strictParse bool, input string) base.Program {
 /* "typ": #TNamed, #TPrimitive, #TypeLit_ */
 
 func (a *FGAdaptor) ExitTNamed(ctx *parser.TNamedContext) {
-	tname := fg.TNamed(ctx.GetName().GetText())
+	tname := fg.NewTNamed(ctx.GetName().GetText())
 	a.push(tname)
 }
 
@@ -202,7 +202,7 @@ func (a *FGAdaptor) ExitVariable(ctx *parser.VariableContext) {
 // Children: 0=typ (*antlr.TerminalNodeImpl), 1='{', 2=exprs (*parser.ExprsContext), 3='}'
 // N.B. ExprsContext is a "helper" Context, actual exprs are its children
 func (a *FGAdaptor) ExitStructLit(ctx *parser.StructLitContext) {
-	t := fg.TNamed(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
+	t := fg.NewTNamed(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
 	es := []fg.FGExpr{}
 	if ctx.GetChildCount() > 3 {
 		nes := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., 'x' ',' 'y' ',' 'z'

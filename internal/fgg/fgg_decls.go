@@ -23,14 +23,6 @@ func NewProgram(ds []Decl, e FGGExpr, printf bool) FGGProgram {
 	return FGGProgram{ds, e, printf}
 }
 
-//func NewSTypeLit(t Name, Psi BigPsi, fds []FieldDecl) STypeLit { return STypeLit{t, Psi, fds} }
-//func NewITypeLit(t_I Name, Psi BigPsi, specs []Spec) ITypeLit {
-//	return ITypeLit{t_I, Psi, specs}
-//}
-
-func NewSTypeLit(fds []FieldDecl) STypeLit { return STypeLit{fds} }
-func NewITypeLit(specs []Spec) ITypeLit    { return ITypeLit{specs} }
-
 func NewTypeDecl(name Name, Psi BigPsi, srcType Type) TypeDecl {
 	return TypeDecl{name, Psi, srcType}
 }
@@ -384,7 +376,9 @@ func makeRootPsi(Psi BigPsi) BigPsi {
 }
 
 // For a type declaration decl, searches for any occurrence
-// of decl.GetName() in the target type, recursively
+// of decl.GetName() in the target type.
+// If the target type is a struct/interface type,
+// checks if its underlying type embeds decl.GetName().
 func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type) {
 	switch target := target.(type) {
 	case TParam, TPrimitive:

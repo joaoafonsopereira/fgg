@@ -166,7 +166,7 @@ func oblitMDecl(ds_fgg []Decl, d fgg.MethDecl) MDecl {
 	for i := 0; i < len(tfs_recv); i++ {
 		us_fgg[i] = tfs_recv[i].GetTParam()
 	}
-	gamma[x_recv] = fgg.NewTName(t_recv.String(), us_fgg)
+	gamma[x_recv] = fgg.NewTNamed(t_recv.String(), us_fgg)
 	for i := 0; i < len(pds_fgg); i++ {
 		pd := pds_fgg[i]
 		gamma[pd.GetName()] = pd.GetType()
@@ -282,7 +282,7 @@ func dtype(ds []Decl, delta fgg.Delta, gamma fgg.Gamma, d fgg.FGGExpr) fgg.Type 
 		for i := 0; i < len(us); i++ {
 			us[i] = fgg.TParam(tfs[i].GetTParam().String())
 		}
-		return fgg.NewTName(t_S, us)
+		return fgg.NewTNamed(t_S, us)
 	case fgg.Select:
 		u := dtype(ds, delta, gamma, e.GetExpr()).(fgg.TNamed)
 		fds := fgg.Fields(ds, u)

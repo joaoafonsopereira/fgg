@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+/* Export */
+
+func NewTNamed(t Name) TNamed                        { return TNamed(t) }
+func NewTPrimitive(t Tag, undefined bool) TPrimitive { return TPrimitive{t, undefined} }
+func NewSTypeLit(fds []FieldDecl) STypeLit           { return STypeLit{fds} }
+func NewITypeLit(ss []Spec) ITypeLit                 { return ITypeLit{ss} }
+
 /******************************************************************************/
 /* Named (defined) types */
 

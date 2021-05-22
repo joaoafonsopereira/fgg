@@ -13,11 +13,10 @@ import (
 /* "Exported" constructors for fgg (monomorph) */
 
 func NewVariable(id Name) Variable                    { return Variable{id} }
-func NewStructLit(t Type, es []FGExpr) StructLit      { return StructLit{t, es} }
+func NewStructLit(t TNamed, es []FGExpr) StructLit    { return StructLit{t, es} }
 func NewSelect(e FGExpr, f Name) Select               { return Select{e, f} }
 func NewCall(e FGExpr, m Name, es []FGExpr) Call      { return Call{e, m, es} }
 func NewAssert(e FGExpr, t Type) Assert               { return Assert{e, t} }
-func NewString(v string) StringLit                    { return StringLit{v} }
 func NewSprintf(format string, args []FGExpr) Sprintf { return Sprintf{format, args} }
 
 /* Variable */
@@ -67,13 +66,13 @@ func (x Variable) ToGoString(ds []Decl) string {
 /* StructLit */
 
 type StructLit struct {
-	t_S   Type
+	t_S   TNamed
 	elems []FGExpr
 }
 
 var _ FGExpr = StructLit{}
 
-func (s StructLit) GetType() Type      { return s.t_S }
+func (s StructLit) GetType() TNamed      { return s.t_S }
 func (s StructLit) GetElems() []FGExpr { return s.elems }
 
 func (s StructLit) Subs(subs map[Variable]FGExpr) FGExpr {
@@ -126,12 +125,10 @@ func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExp
 		}
 
 		elems[i] = newSubtree
-		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
 		// corresponding to a value of the expected type (u)
-		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
-			if u_P, ok := u.(TPrimitive); ok {
-				elems[i] = ValueFromLiteral(newSubtree, u_P)
-			}
+		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
+			elems[i] = ConvertLitNode(lit, u)
 		}
 	}
 	return s.t_S, StructLit{s.t_S, elems}
@@ -345,12 +342,10 @@ func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 		}
 
 		args[i] = newSubtree
-		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
 		// corresponding to a value of the expected type (u)
-		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
-			if u_P, ok := u.(TPrimitive); ok {
-				args[i] = ValueFromLiteral(newSubtree, u_P)
-			}
+		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
+			args[i] = ConvertLitNode(lit, u)
 		}
 	}
 	return g.t_ret, Call{e_recv, c.meth, args}

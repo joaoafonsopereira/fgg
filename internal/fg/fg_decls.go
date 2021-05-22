@@ -21,9 +21,6 @@ func NewFGProgram(ds []Decl, e FGExpr, printf bool) FGProgram {
 	return FGProgram{ds, e, printf}
 }
 
-func NewSTypeLit(fds []FieldDecl) STypeLit { return STypeLit{fds} }
-func NewITypeLit(ss []Spec) ITypeLit       { return ITypeLit{ss} }
-
 func NewTypeDecl(name Name, srcType Type) TypeDecl {
 	return TypeDecl{name, srcType}
 }

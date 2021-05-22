@@ -7,10 +7,18 @@ import (
 	"strings"
 )
 
+/* Exports */
+
+func NewTParam(name Name) TParam                 { return TParam(name) }
+func NewTNamed(t Name, us []Type) TNamed         { return TNamed{t, us} }
+func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
+func NewSTypeLit(fds []FieldDecl) STypeLit       { return STypeLit{fds} }
+func NewITypeLit(specs []Spec) ITypeLit          { return ITypeLit{specs} }
 
 /* Type parameters */
 
 type TParam Name
+
 var _ Type = TParam("")
 
 func (a TParam) TSubs(subs map[TParam]Type) Type {
@@ -144,7 +152,7 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	switch u := u.(type) {
 	case TParam: // e.g., fgg_test.go, Test014 TODO revise this
 		panic("Type name does not implement open type param: found=" +
-			  u0.String() + ", expected=" + u.String())
+			u0.String() + ", expected=" + u.String())
 	case TPrimitive:
 		return false
 	case STypeLit: // or any other composite type literal, if there were more
@@ -459,7 +467,6 @@ func (s STypeLit) Underlying(ds []Decl) Type {
 	return s
 }
 
-
 type FieldDecl struct {
 	field Name
 	u     Type // u=tau
@@ -536,7 +543,7 @@ func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	if isIfaceType(ds, u) {
 		return false
 	}
-	gs := methodsDelta(ds, delta, u)   // u is a t_I
+	gs := methodsDelta(ds, delta, u) // u is a t_I
 	gs0 := methodsDelta(ds, delta, i)
 	return gs0.IsSupersetOf(gs)
 }

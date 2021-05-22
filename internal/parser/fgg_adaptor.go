@@ -64,7 +64,7 @@ func (a *FGGAdaptor) Parse(strictParse bool, input string) base.Program {
 /* "typ": #TypeParam, #TypeName, #TPrimitive, #TypeLit_ */
 
 func (a *FGGAdaptor) ExitTypeParam(ctx *parser.TypeParamContext) {
-	b := fgg.TParam(ctx.GetName().GetText())
+	b := fgg.NewTParam(ctx.GetName().GetText())
 	a.push(b)
 }
 
@@ -81,7 +81,7 @@ func (a *FGGAdaptor) ExitTypeName(ctx *parser.TypeNameContext) {
 		}
 	}
 
-	a.push(fgg.NewTName(t, us))
+	a.push(fgg.NewTNamed(t, us))
 }
 
 func (a *FGGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
@@ -140,7 +140,7 @@ func (a *FGGAdaptor) ExitTypeFormals(ctx *parser.TypeFormalsContext) {
 
 func (a *FGGAdaptor) ExitTypeFDecl(ctx *parser.TypeFDeclContext) {
 	u := a.pop().(fgg.Type)                                              // CHECKME: TName? (\tau_I)
-	b := fgg.TParam(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText()) // Not pop().(TParam) -- BNF asks for NAME
+	b := fgg.NewTParam(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText()) // Not pop().(TParam) -- BNF asks for NAME
 	a.push(fgg.NewTFormal(b, u))
 }
 
