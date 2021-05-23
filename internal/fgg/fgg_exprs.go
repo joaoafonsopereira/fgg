@@ -22,7 +22,6 @@ func NewStructLit(u_S TNamed, es []FGGExpr) StructLit         { return StructLit
 func NewSelect(e FGGExpr, f Name) Select                      { return Select{e, f} }
 func NewCall(e FGGExpr, m Name, us []Type, es []FGGExpr) Call { return Call{e, m, us, es} }
 func NewAssert(e FGGExpr, t Type) Assert                      { return Assert{e, t} }
-func NewString(v string) StringLit                            { return StringLit{v} }
 func NewSprintf(format string, args []FGGExpr) Sprintf        { return Sprintf{format, args} }
 
 /* Variable */
@@ -562,48 +561,7 @@ func (a Assert) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
-/* StringLit, fmt.Sprintf */
-
-type StringLit struct {
-	val string
-}
-
-var _ FGGExpr = StringLit{}
-
-func (s StringLit) GetValue() string { return s.val }
-
-func (s StringLit) Subs(subs map[Variable]FGGExpr) FGGExpr {
-	return s
-}
-
-func (s StringLit) TSubs(subs map[TParam]Type) FGGExpr {
-	return s
-}
-
-func (s StringLit) Eval(ds []Decl) (FGGExpr, string) {
-	panic("Cannot reduce: " + s.String())
-}
-
-func (s StringLit) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
-	return STRING_TYPE, s
-}
-
-// From base.Expr
-func (s StringLit) IsValue() bool {
-	return true
-}
-
-func (s StringLit) CanEval(ds []Decl) bool {
-	return false
-}
-
-func (s StringLit) String() string {
-	return "\"" + s.val + "\""
-}
-
-func (s StringLit) ToGoString(ds []Decl) string {
-	return "\"" + s.val + "\""
-}
+/* fmt.Sprintf */
 
 type Sprintf struct {
 	format string // Includes surrounding quotes
@@ -650,7 +608,7 @@ func (s Sprintf) Eval(ds []Decl) (FGGExpr, string) {
 		str := fmt.Sprintf(template, cast...)
 		str = strings.ReplaceAll(str, "\"", "") // HACK because StringLit.String() includes quotes
 		// FIXME: currently user remplates cannot include xplicit quote chars
-		return StringLit{str}, "Sprintf"
+		return NewStringLit(str), "Sprintf"
 	}
 }
 
@@ -660,7 +618,7 @@ func (s Sprintf) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (
 	for i := 0; i < len(s.args); i++ {
 		_, args[i] = s.args[i].Typing(ds, delta, gamma, allowStupid)
 	}
-	return STRING_TYPE, Sprintf{s.format, args}
+	return TPrimitive{tag:STRING}, Sprintf{s.format, args}
 }
 
 // From base.Expr

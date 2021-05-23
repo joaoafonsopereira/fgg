@@ -348,3 +348,8 @@ func (a *FGGAdaptor) ExitFloatLit(ctx *parser.FloatLitContext) {
 	lit := ctx.GetLit().GetText()
 	a.push(fgg.NewFloatLit(lit))
 }
+
+func (a *FGGAdaptor) ExitStringLit(ctx *parser.StringLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fgg.NewStringLit(lit))
+}

@@ -7,8 +7,7 @@ import (
 	"strings"
 )
 
-// constants
-// CHECKME(jp): maybe these "representations" will change
+/* constants */
 
 type Tag int // maybe rename to TypeTag
 
@@ -27,6 +26,7 @@ var NamesToTags = map[string]Tag{
 	"int64":   INT64,
 	"float32": FLOAT32,
 	"float64": FLOAT64,
+	"string":  STRING,
 }
 
 var TagsToNames = map[Tag]string{
@@ -35,6 +35,7 @@ var TagsToNames = map[Tag]string{
 	INT64:   "int64",
 	FLOAT32: "float32",
 	FLOAT64: "float64",
+	STRING:  "string",
 }
 
 func TagFromName(name string) Tag {
@@ -49,7 +50,19 @@ func NameFromTag(tag Tag) string {
 	return TagsToNames[tag]
 }
 
-/* "Exported" constructors (( ? for fgg (monomorph) ? )) */
+/* "Exported" constructors for fgg (monomorph) */
+
+func NewPrimitiveLiteral(pload interface{}, tag Tag) PrimitiveLiteral {
+	return PrimitiveLiteral{pload, tag}
+}
+func NewBoolVal(val bool) BoolVal          { return BoolVal{val} }
+func NewInt32Val(val int32) Int32Val       { return Int32Val{val} }
+func NewInt64Val(val int64) Int64Val       { return Int64Val{val} }
+func NewFloat32Val(val float32) Float32Val { return Float32Val{val} }
+func NewFloat64Val(val float64) Float64Val { return Float64Val{val} }
+func NewStringVal(val string) StringVal    { return StringVal{val} }
+
+/* Remaining "exported" constructors */
 
 func NewBool(lit string) BoolVal {
 	b, _ := strconv.ParseBool(lit)
@@ -80,11 +93,11 @@ func NewFloatLit(lit string) PrimitiveLiteral {
 	}
 }
 
-func ValueFromLiteral(n NumericLiteral, decldType TPrimitive) FGExpr {
-	switch decldType.Tag() {
-	case INT32:
-		return makeInt32Val(n)
-	case INT64:
+func NewStringLit(lit string) StringVal {
+	trim := strings.ReplaceAll(lit, "\"", "")
+	return StringVal{trim}
+}
+
 		return makeInt64Val(n)
 	case FLOAT32:
 		return makeFloat32Val(n)
@@ -156,7 +169,7 @@ type (
 	Int64Val   struct{ val int64 }
 	Float32Val struct{ val float32 }
 	Float64Val struct{ val float64 }
-	// ...
+	StringVal  struct{ val string }
 )
 
 var _ FGExpr = BoolVal{}
@@ -164,42 +177,49 @@ var _ FGExpr = Int32Val{}
 var _ FGExpr = Int64Val{}
 var _ FGExpr = Float32Val{}
 var _ FGExpr = Float64Val{}
+var _ FGExpr = StringVal{}
 
 func (x BoolVal) GetValue() bool       { return x.val }
 func (x Int32Val) GetValue() int32     { return x.val }
 func (x Int64Val) GetValue() int64     { return x.val }
 func (x Float32Val) GetValue() float32 { return x.val }
 func (x Float64Val) GetValue() float64 { return x.val }
+func (x StringVal) GetValue() string   { return x.val }
 
 func (x BoolVal) Subs(map[Variable]FGExpr) FGExpr    { return x }
 func (x Int32Val) Subs(map[Variable]FGExpr) FGExpr   { return x }
 func (x Int64Val) Subs(map[Variable]FGExpr) FGExpr   { return x }
 func (x Float32Val) Subs(map[Variable]FGExpr) FGExpr { return x }
 func (x Float64Val) Subs(map[Variable]FGExpr) FGExpr { return x }
+func (x StringVal) Subs(map[Variable]FGExpr) FGExpr  { return x }
 
 func (x BoolVal) Eval([]Decl) (FGExpr, string)    { panic("Cannot reduce: " + x.String()) }
 func (x Int32Val) Eval([]Decl) (FGExpr, string)   { panic("Cannot reduce: " + x.String()) }
 func (x Int64Val) Eval([]Decl) (FGExpr, string)   { panic("Cannot reduce: " + x.String()) }
 func (x Float32Val) Eval([]Decl) (FGExpr, string) { panic("Cannot reduce: " + x.String()) }
 func (x Float64Val) Eval([]Decl) (FGExpr, string) { panic("Cannot reduce: " + x.String()) }
+func (x StringVal) Eval([]Decl) (FGExpr, string)  { panic("Cannot reduce: " + x.String()) }
 
 func (x BoolVal) Typing([]Decl, Gamma, bool) (Type, FGExpr)    { return TPrimitive{tag: BOOL}, x }
 func (x Int32Val) Typing([]Decl, Gamma, bool) (Type, FGExpr)   { return TPrimitive{tag: INT32}, x }
 func (x Int64Val) Typing([]Decl, Gamma, bool) (Type, FGExpr)   { return TPrimitive{tag: INT64}, x }
 func (x Float32Val) Typing([]Decl, Gamma, bool) (Type, FGExpr) { return TPrimitive{tag: FLOAT32}, x }
 func (x Float64Val) Typing([]Decl, Gamma, bool) (Type, FGExpr) { return TPrimitive{tag: FLOAT64}, x }
+func (x StringVal) Typing([]Decl, Gamma, bool) (Type, FGExpr)  { return TPrimitive{tag: STRING}, x }
 
 func (x BoolVal) IsValue() bool    { return true }
 func (x Int32Val) IsValue() bool   { return true }
 func (x Int64Val) IsValue() bool   { return true }
 func (x Float32Val) IsValue() bool { return true }
 func (x Float64Val) IsValue() bool { return true }
+func (x StringVal) IsValue() bool  { return true }
 
 func (x BoolVal) CanEval([]base.Decl) bool    { return false }
 func (x Int32Val) CanEval([]base.Decl) bool   { return false }
 func (x Int64Val) CanEval([]base.Decl) bool   { return false }
 func (x Float32Val) CanEval([]base.Decl) bool { return false }
 func (x Float64Val) CanEval([]base.Decl) bool { return false }
+func (x StringVal) CanEval([]base.Decl) bool  { return false }
 
 func (x BoolVal) String() string {
 	return chavetize("BoolVal", strconv.FormatBool(x.val))
@@ -220,12 +240,16 @@ func (x Float32Val) String() string {
 func (x Float64Val) String() string {
 	return chavetize("Float64Val", strconv.FormatFloat(x.val, 'E', -1, 64))
 }
+func (x StringVal) String() string {
+	return chavetize("StringVal", "\""+x.val+"\"")
+}
 
 func (x BoolVal) ToGoString([]base.Decl) string    { return x.String() }
 func (x Int32Val) ToGoString([]base.Decl) string   { return x.String() }
 func (x Int64Val) ToGoString([]base.Decl) string   { return x.String() }
 func (x Float32Val) ToGoString([]base.Decl) string { return x.String() }
 func (x Float64Val) ToGoString([]base.Decl) string { return x.String() }
+func (x StringVal) ToGoString([]base.Decl) string  { return x.String() }
 
 /* Helpers */
 
@@ -250,7 +274,6 @@ func newFloatLit(lit string) (PrimitiveLiteral, bool) {
 }
 
 // checks if the fractional part of the argument only contains zeros
-// TODO should this be moved to the parser/adaptor??
 func hasNoFractionalPart(x string) bool {
 	var zerosFractional = regexp.MustCompile(`^[-+]?\d*\.0*$`)
 	return zerosFractional.FindString(x) != ""
@@ -323,15 +346,15 @@ func makeFloat64Val(expr FGExpr) Float64Val {
 	panic("Expr " + expr.String() + " is not a float64")
 }
 
-//func exprToString(expr FGExpr) string {
-//	switch e := expr.(type) {
-//	case StringVal:
-//		return e.val
-//	case PrimitiveLiteral:
-//		return e.payload.(string)
-//	}
-//	panic("Expr is not a string")
-//}
+func makeStringVal(expr FGExpr) StringVal {
+	switch e := expr.(type) {
+	case StringVal:
+		return e
+	case PrimitiveLiteral:
+		return StringVal{e.payload.(string)}
+	}
+	panic("Expr " + expr.String() + " is not a string")
+}
 
 /* Predicates */
 

@@ -338,8 +338,8 @@ func rawBinop(left, right interface{}, op Operator) interface{} {
 func match(x, y FGExpr) (FGExpr, FGExpr) {
 	switch xx := x.(type) {
 
-	case BoolVal:
-		return x, y // y is surely also a BoolVal
+	case BoolVal, StringVal:
+		return x, y // y has the same type for sure (or Typing wouldn't succeed)
 
 	case PrimitiveLiteral:
 		if yy, ok := y.(PrimitiveLiteral); ok {

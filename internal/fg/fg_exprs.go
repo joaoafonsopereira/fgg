@@ -488,44 +488,7 @@ func (a Assert) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
-/* StringLit, fmt.Sprintf */
-
-type StringLit struct {
-	val string
-}
-
-var _ FGExpr = StringLit{}
-
-func (s StringLit) GetValue() string { return s.val }
-
-func (s StringLit) Subs(subs map[Variable]FGExpr) FGExpr {
-	return s
-}
-
-func (s StringLit) Eval(ds []Decl) (FGExpr, string) {
-	panic("Cannot reduce: " + s.String())
-}
-
-func (s StringLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
-	return STRING_TYPE, s
-}
-
-// From base.Expr
-func (s StringLit) IsValue() bool {
-	return true
-}
-
-func (s StringLit) CanEval(ds []Decl) bool {
-	return false
-}
-
-func (s StringLit) String() string {
-	return "\"" + s.val + "\""
-}
-
-func (s StringLit) ToGoString(ds []Decl) string {
-	return "\"" + s.val + "\""
-}
+/* fmt.Sprintf */
 
 type Sprintf struct {
 	format string // Includes surrounding quotes
@@ -568,7 +531,7 @@ func (s Sprintf) Eval(ds []Decl) (FGExpr, string) {
 		str := fmt.Sprintf(template, cast...)
 		str = strings.ReplaceAll(str, "\"", "") // HACK because StringLit.String() includes quotes
 		// FIXME: currently, user templates cannot include explicit quote chars
-		return StringLit{str}, "Sprintf"
+		return NewStringLit(str), "Sprintf"
 	}
 }
 
@@ -578,7 +541,7 @@ func (s Sprintf) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr)
 	for i := 0; i < len(s.args); i++ {
 		_, args[i] = s.args[i].Typing(ds, gamma, allowStupid)
 	}
-	return STRING_TYPE, Sprintf{s.format, args}
+	return TPrimitive{tag: STRING}, Sprintf{s.format, args}
 }
 
 // From base.Expr

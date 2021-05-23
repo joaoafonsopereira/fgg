@@ -302,3 +302,8 @@ func (a *FGAdaptor) ExitFloatLit(ctx *parser.FloatLitContext) {
 	lit := ctx.GetLit().GetText()
 	a.push(fg.NewFloatLit(lit))
 }
+
+func (a *FGAdaptor) ExitStringLit(ctx *parser.StringLitContext) {
+	lit := ctx.GetLit().GetText()
+	a.push(fg.NewStringLit(lit))
+}
