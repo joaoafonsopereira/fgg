@@ -87,8 +87,8 @@ func Translate(p fgg.FGGProgram) FGRProgram { // TODO: FGR -- also subsume exist
 		for i := 0; i < len(us); i++ {
 			us[i] = tfs[i].GetTParam()
 		}
-		dummy := fgg.NewTName(c.GetName(), us) // `us` are just the decl TParams, args not actually needed for `methods` or below
-		gs := fgg.Methods(ds_fgg, dummy)       // !!! all meths of t_I target
+		dummy := fgg.NewTNamed(c.GetName(), us) // `us` are just the decl TParams, args not actually needed for `methods` or below
+		gs := fgg.Methods(ds_fgg, dummy)        // !!! all meths of t_I target
 		//for _, s := range c.ss {
 		for _, g := range gs {
 			delta := make(fgg.Delta)
@@ -210,7 +210,7 @@ func fgrTransMDecl(ds []Decl, d1 fgg.MethDecl, wrappers map[Type]adptrPair) MDec
 	for i := 0; i < len(us); i++ {
 		us[i] = tfs[i].GetTParam()
 	}
-	gamma[x_recv] = fgg.NewTName(t_recv, us) // !!! also receiver
+	gamma[x_recv] = fgg.NewTNamed(t_recv, us) // !!! also receiver
 	for _, v := range pds_fgg {
 		gamma[v.GetName()] = v.GetType()
 	}
@@ -335,7 +335,7 @@ func fgrTransExpr(ds []Decl, delta fgg.Delta, gamma fgg.Gamma, e fgg.FGGExpr,
 		for i := 0; i < len(tfs_recv); i++ {
 			us[i] = tfs_recv[i].GetTParam()
 		}
-		dummy := fgg.NewTName(td.GetName(), us) // From the "base" type decl, not the instantiated type -- TODO: dtype
+		dummy := fgg.NewTNamed(td.GetName(), us) // From the "base" type decl, not the instantiated type -- TODO: dtype
 		g := fgg.Methods(ds, dummy)[m]
 
 		delta1 := make(map[fgg.TParam]fgg.Type)

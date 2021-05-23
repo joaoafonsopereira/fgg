@@ -2,6 +2,7 @@ package fgg
 
 import (
 	"github.com/rhu1/fgg/internal/base"
+	"reflect"
 	"strings"
 )
 
@@ -14,7 +15,7 @@ const (
 	// logical
 	LAND = Operator("&&")
 	LOR  = Operator("||")
-	// relational TODO separate from the rest to have "type safety" as in an enum
+	// relational
 	GT = Operator(">")
 	LT = Operator("<")
 )
@@ -104,82 +105,41 @@ func (b BinaryOperation) Eval(ds []Decl) (FGGExpr, string) {
 	left, right := match(b.left, b.right)
 
 	switch l := left.(type) {
+	case PrimitiveLiteral:
+		r := right.(PrimitiveLiteral)
+		res := rawBinop(l.payload, r.payload, b.op)
+		return PrimitiveLiteral{res, l.tag}, OpToRule[b.op]
+
 	case BoolVal:
 		r := right.(BoolVal)
-		switch b.op {
-		case LAND:
-			return BoolVal{l.val && r.val}, OpToRule[b.op]
-		case LOR:
-			return BoolVal{l.val || r.val}, OpToRule[b.op]
-		}
-
-	case NumericLiteral: // left & right are both PrimitiveLiterals TODO
-		switch l.tag {
-		case INT32, INT64: // both have payload of type int64
-			lval := l.payload.(int64)
-			rval := right.(NumericLiteral).payload.(int64)
-			var res int64
-			switch b.op {
-			case ADD:
-				res = lval + rval
-			case SUB:
-				res = lval - rval
-			}
-			return NumericLiteral{res, l.tag}, OpToRule[b.op]
-
-		case FLOAT32, FLOAT64: // both have payload of type float64
-			lval := l.payload.(float64)
-			rval := right.(NumericLiteral).payload.(float64)
-			var res float64
-			switch b.op {
-			case ADD:
-				res = lval + rval
-			case SUB:
-				res = lval - rval
-			}
-			return NumericLiteral{res, l.tag}, OpToRule[b.op]
-		}
+		res := rawBinop(l.val, r.val, b.op).(bool)
+		return BoolVal{res}, OpToRule[b.op]
 
 	case Int32Val:
 		r := right.(Int32Val)
-		switch b.op {
-		case ADD:
-			return Int32Val{l.val + r.val}, OpToRule[b.op]
-		case SUB:
-			return Int32Val{l.val - r.val}, OpToRule[b.op]
-		}
+		res := rawBinop(l.val, r.val, b.op).(int32)
+		return Int32Val{res}, OpToRule[b.op]
 
 	case Int64Val:
 		r := right.(Int64Val)
-		switch b.op {
-		case ADD:
-			return Int64Val{l.val + r.val}, OpToRule[b.op]
-		case SUB:
-			return Int64Val{l.val - r.val}, OpToRule[b.op]
-		}
+		res := rawBinop(l.val, r.val, b.op).(int64)
+		return Int64Val{res}, OpToRule[b.op]
 
 	case Float32Val:
 		r := right.(Float32Val)
-		switch b.op {
-		case ADD:
-			return Float32Val{l.val + r.val}, OpToRule[b.op]
-		case SUB:
-			return Float32Val{l.val - r.val}, OpToRule[b.op]
-		}
+		res := rawBinop(l.val, r.val, b.op).(float32)
+		return Float32Val{res}, OpToRule[b.op]
 
 	case Float64Val:
 		r := right.(Float64Val)
-		switch b.op {
-		case ADD:
-			return Float64Val{l.val + r.val}, OpToRule[b.op]
-		case SUB:
-			return Float64Val{l.val - r.val}, OpToRule[b.op]
-		}
+		res := rawBinop(l.val, r.val, b.op).(float64)
+		return Float64Val{res}, OpToRule[b.op]
 
-		//case StringVal:
-		//	result = Float64Val{l.val + a.right.(Float64Val).val}
-		//default:
-		//	panic()
+	case StringVal:
+		r := right.(StringVal)
+		res := rawBinop(l.val, r.val, b.op).(string)
+		return StringVal{res}, OpToRule[b.op]
+
 	}
 	panic("Unsupported binary operation: " +
 		b.left.String() + " " + string(b.op) + " " + b.right.String())
@@ -191,19 +151,17 @@ func (b BinaryOperation) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid
 
 	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
 	// any of the Impls tests below
-	// TODO refactor each check into a single function, e.g. checkNumeric that
-	//  panics inside (?)
 	switch b.op {
 	case ADD:
-		if !isNumeric(ltype) && !isString(ltype) {
+		if !isNumeric(ds, ltype) && !isString(ds, ltype) {
 			panic("Add doesn't support type: " + ltype.String())
 		}
 	case SUB:
-		if !isNumeric(ltype) {
+		if !isNumeric(ds, ltype) {
 			panic("Sub doesn't support type: " + ltype.String())
 		}
 	case LAND, LOR:
-		if !isBoolean(ltype) {
+		if !isBoolean(ds, ltype) {
 			// TODO replace by string(b.op)
 			panic("LAND/LOR doesn't support type: " + ltype.String())
 		}
@@ -244,72 +202,40 @@ func (c Comparison) Eval(ds []Decl) (FGGExpr, string) {
 
 	left, right := match(c.left, c.right)
 
+	// TODO seems like most of this code is repeated; maybe refactor, smthing like a method .Val()
 	switch l := left.(type) {
-	case NumericLiteral: // left & right are both PrimitiveLiterals
-		switch l.tag {
-		case INT32, INT64: // both have payload of type int64
-			lval := l.payload.(int64)
-			rval := right.(NumericLiteral).payload.(int64)
-			switch c.op {
-			case GT:
-				return BoolVal{lval > rval}, OpToRule[c.op]
-			case LT:
-				return BoolVal{lval < rval}, OpToRule[c.op]
-			}
-
-		case FLOAT32, FLOAT64: // both have payload of type float64
-			lval := l.payload.(float64)
-			rval := right.(NumericLiteral).payload.(float64)
-			switch c.op {
-			case GT:
-				return BoolVal{lval > rval}, OpToRule[c.op]
-			case LT:
-				return BoolVal{lval < rval}, OpToRule[c.op]
-			}
-		}
+	case PrimitiveLiteral: // left & right are both PrimitiveLiterals
+		r := right.(PrimitiveLiteral)
+		res := rawBinop(l.payload, r.payload, c.op).(bool)
+		return BoolVal{res}, OpToRule[c.op]
 
 	case Int32Val:
 		r := right.(Int32Val)
-		switch c.op {
-		case GT:
-			return BoolVal{l.val > r.val}, OpToRule[c.op]
-		case LT:
-			return BoolVal{l.val < r.val}, OpToRule[c.op]
-		}
+		res := rawBinop(l.val, r.val, c.op).(bool)
+		return BoolVal{res}, OpToRule[c.op]
 
 	case Int64Val:
 		r := right.(Int64Val)
-		switch c.op {
-		case GT:
-			return BoolVal{l.val > r.val}, OpToRule[c.op]
-		case LT:
-			return BoolVal{l.val < r.val}, OpToRule[c.op]
-		}
+		res := rawBinop(l.val, r.val, c.op).(bool)
+		return BoolVal{res}, OpToRule[c.op]
 
 	case Float32Val:
 		r := right.(Float32Val)
-		switch c.op {
-		case GT:
-			return BoolVal{l.val > r.val}, OpToRule[c.op]
-		case LT:
-			return BoolVal{l.val < r.val}, OpToRule[c.op]
-		}
+		res := rawBinop(l.val, r.val, c.op).(bool)
+		return BoolVal{res}, OpToRule[c.op]
 
 	case Float64Val:
 		r := right.(Float64Val)
-		switch c.op {
-		case GT:
-			return BoolVal{l.val > r.val}, OpToRule[c.op]
-		case LT:
-			return BoolVal{l.val < r.val}, OpToRule[c.op]
-		}
+		res := rawBinop(l.val, r.val, c.op).(bool)
+		return BoolVal{res}, OpToRule[c.op]
 
-		//case StringVal:
-		//	result = Float64Val{l.val + a.right.(Float64Val).val}
-		//default:
-		//	panic()
+	case StringVal:
+		r := right.(StringVal)
+		res := rawBinop(l.val, r.val, c.op).(bool)
+		return BoolVal{res}, OpToRule[c.op]
 	}
-	panic("Unsupported binary operation: " +
+
+	panic("Unsupported comparison: " +
 		c.left.String() + " " + string(c.op) + " " + c.right.String())
 }
 
@@ -319,7 +245,7 @@ func (c Comparison) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool
 
 	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
 	// the Impls tests below
-	if !isComparable(ltype) {
+	if !isComparable(ds, ltype) {
 		panic("GT/LT doesn't support type: " + ltype.String())
 	}
 	if !ltype.Impls(ds, rtype) && !rtype.Impls(ds, ltype) {
@@ -331,30 +257,103 @@ func (c Comparison) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool
 
 /* Helpers */
 
+func rawBinop(left, right interface{}, op Operator) interface{} {
+	switch lval := left.(type) {
+	case bool:
+		rval := right.(bool)
+		switch op {
+		case LAND:
+			return lval && rval
+		case LOR:
+			return lval || rval
+		}
+	case int32:
+		rval := right.(int32)
+		switch op {
+		case ADD:
+			return lval + rval
+		case SUB:
+			return lval - rval
+		case GT:
+			return lval > rval
+		case LT:
+			return lval < rval
+		}
+	case int64:
+		rval := right.(int64)
+		switch op {
+		case ADD:
+			return lval + rval
+		case SUB:
+			return lval - rval
+		case GT:
+			return lval > rval
+		case LT:
+			return lval < rval
+		}
+	case float32:
+		rval := right.(float32)
+		switch op {
+		case ADD:
+			return lval + rval
+		case SUB:
+			return lval - rval
+		case GT:
+			return lval > rval
+		case LT:
+			return lval < rval
+		}
+	case float64:
+		rval := right.(float64)
+		switch op {
+		case ADD:
+			return lval + rval
+		case SUB:
+			return lval - rval
+		case GT:
+			return lval > rval
+		case LT:
+			return lval < rval
+		}
+	case string:
+		rval := right.(string)
+		switch op {
+		case ADD:
+			return lval + rval
+		case GT:
+			return lval > rval
+		case LT:
+			return lval < rval
+		}
+	}
+	panic("Unsupported raw binOp: " + string(op) +
+		" for type: " + reflect.TypeOf(left).String())
+}
+
 // Returns the matching representation for x and y.
 // If either x or y already has a concrete representation(type), returns both
-// as having that representation -- e.g. match(Int32Val, NumericLiteral) = (Int32Val, Int32Val)
-// If both x and y have undefined representation (both NumericLiteral's),
+// as having that representation -- e.g. match(Int32Val, PrimitiveLiteral) = (Int32Val, Int32Val)
+// If both x and y have undefined representation (both PrimitiveLiteral's),
 // returns the one with the 'highest' tag.
 //
 // Pre: x and y are compatible (match can only be invoked during Eval, i.e. after Typing)
 func match(x, y FGGExpr) (FGGExpr, FGGExpr) {
 	switch xx := x.(type) {
 
-	case BoolVal:
-		return x, y // y is surely also a BoolVal
+	case BoolVal, StringVal:
+		return x, y // y has the same type for sure (or Typing wouldn't succeed)
 
-	case NumericLiteral:
-		if yy, ok := y.(NumericLiteral); ok {
+	case PrimitiveLiteral:
+		if yy, ok := y.(PrimitiveLiteral); ok {
 			t := maxTag(xx.tag, yy.tag)
 
 			if t == INT32 || t == INT64 {
-				return NumericLiteral{xx.payload, t},
-					NumericLiteral{yy.payload, t}
+				return PrimitiveLiteral{xx.payload, t},
+					PrimitiveLiteral{yy.payload, t}
 			}
 			if t == FLOAT32 || t == FLOAT64 {
-				return NumericLiteral{anyToFloat64(xx.payload), t},
-					NumericLiteral{anyToFloat64(yy.payload), t}
+				return PrimitiveLiteral{anyToFloat64(xx.payload), t},
+					PrimitiveLiteral{anyToFloat64(yy.payload), t}
 			}
 		} else {
 			// invert -- will fall into one of the cases below
@@ -370,8 +369,6 @@ func match(x, y FGGExpr) (FGGExpr, FGGExpr) {
 		return xx, makeFloat32Val(y)
 	case Float64Val:
 		return xx, makeFloat64Val(y)
-		//case StringVal:
-		//	result = Float64Val{xx.val + a.right.(Float64Val).val}
 	}
 
 	panic("Can't match " + x.String() + " with " + y.String())

@@ -7,15 +7,15 @@ import (
 
 var _ = fmt.Errorf
 
-/* Constants */
+/* GroundType, GroundEnv */
 
-// Hack
-var STRING_TYPE_MONOM = TNamed{string(STRING_TYPE), SmallPsi{}} // Because TNamed required
+type GroundType interface { // TODO move??
+	Type
+	isGround() bool
+}
 
-/* GroundEnv */
-
-// Basically a Gamma for only ground TNamed
-type GroundGamma map[Name]TNamed // Pre: forall TName, isGround
+// Basically a Gamma for only ground types
+type GroundGamma map[Name]GroundType
 
 /**
  * Build Omega -- (morally) a map from ground FGG types to Sigs of (potential)
@@ -26,7 +26,7 @@ type GroundGamma map[Name]TNamed // Pre: forall TName, isGround
 
 // Pre: IsMonomOK
 func GetOmega(ds []Decl, e_main FGGExpr) Omega {
-	omega := Omega{make(map[string]TNamed), make(map[string]MethInstan)}
+	omega := Omega{make(map[string]GroundType), make(map[string]MethInstan)}
 	collectExpr(ds, make(GroundGamma), e_main, omega)
 	fixomega(ds, omega)
 	//omega.Println()
@@ -37,12 +37,12 @@ func GetOmega(ds []Decl, e_main FGGExpr) Omega {
 
 type Omega struct {
 	// Keys given by toKey_Wt, toKey_Wm
-	us map[string]TNamed // Pre: all TNamed are isGround
+	us map[string]GroundType
 	ms map[string]MethInstan
 }
 
 func (w Omega) clone() Omega {
-	us := make(map[string]TNamed)
+	us := make(map[string]GroundType)
 	ms := make(map[string]MethInstan)
 	for k, v := range w.us {
 		us[k] = v
@@ -66,13 +66,13 @@ func (w Omega) Println() {
 }
 
 type MethInstan struct {
-	u_recv TNamed // Pre: isGround
+	u_recv GroundType // Pre: isGround
 	meth   Name
 	psi    SmallPsi // Pre: all isGround
 }
 
 // Pre: isGround(u_ground)
-func toKey_Wt(u_ground TNamed) string {
+func toKey_Wt(u_ground GroundType) string {
 	return u_ground.String()
 }
 
@@ -121,13 +121,15 @@ func collectExpr(ds []Decl, gamma GroundGamma, e FGGExpr, omega Omega) bool {
 		for k, v := range gamma {
 			gamma1[k] = v
 		}
-		u_recv := e1.e_recv.Typing(ds, make(Delta), gamma1, false).(TNamed)
-		k_t := toKey_Wt(u_recv)
+		// TODO check _ assign
+		tmp, _ := e1.e_recv.Typing(ds, make(Delta), gamma1, false)
+		ground_recv := tmp.(GroundType)
+		k_t := toKey_Wt(ground_recv)
 		if _, ok := omega.us[k_t]; !ok {
-			omega.us[k_t] = u_recv
+			omega.us[k_t] = ground_recv
 			res = true
 		}
-		m := MethInstan{u_recv, e1.meth, e1.GetTArgs()} // N.B. type/method instans recorded separately
+		m := MethInstan{ground_recv, e1.meth, e1.GetTArgs()} // N.B. type/method instans recorded separately
 		k_m := toKey_Wm(m)
 		if _, ok := omega.ms[k_m]; !ok {
 			omega.ms[k_m] = m
@@ -135,29 +137,30 @@ func collectExpr(ds []Decl, gamma GroundGamma, e FGGExpr, omega Omega) bool {
 		}
 	case Assert:
 		res = collectExpr(ds, gamma, e1.e_I, omega) || res
-		u := e1.u_cast.(TNamed)
-		k := toKey_Wt(u)
+		ground := e1.u_cast.(GroundType)
+		k := toKey_Wt(ground)
 		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = u
+			omega.us[k] = ground
 			res = true
-		}
-	case StringLit: // CHECKME
-		//k := toKey_Wt(STRING_TYPE)
-		k := string(STRING_TYPE)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = STRING_TYPE_MONOM
-			res = true // CHECKME
 		}
 	case Sprintf:
-		//k := toKey_Wt(STRING_TYPE)
-		k := string(STRING_TYPE)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = STRING_TYPE_MONOM
-			res = true
-		}
 		for _, arg := range e1.args {
 			res = collectExpr(ds, gamma, arg, omega) || res
 		}
+
+	case BinaryOperation: // TODO is it possible to factor out the repeated code?? <<<<<<<-----------
+		res = collectExpr(ds, gamma, e1.left, omega) || res
+		res = collectExpr(ds, gamma, e1.right, omega) || res
+	case Comparison:
+		res = collectExpr(ds, gamma, e1.left, omega) || res
+		res = collectExpr(ds, gamma, e1.right, omega) || res
+
+	case PrimitiveLiteral, BoolVal, Int32Val, Int64Val, Float32Val, Float64Val, StringVal: // TODO maybe create an interface to represent all primitives <<<<<<<-----------
+		// Do nothing -- these nodes are leafs of the Ast, hence there is no
+		// new type instantiations to be found underneath them.
+		// Besides, there's no reason to collect primitive type 'instances', as
+		// there is only 1 possible 'instance' and it has no methods.
+
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e).String() + "\n\t" +
 			e.String())
@@ -186,7 +189,7 @@ func auxG(ds []Decl, omega Omega) bool {
 
 func auxF(ds []Decl, omega Omega) bool {
 	res := false
-	tmp := make(map[string]TNamed)
+	tmp := make(map[string]GroundType)
 	for _, u := range omega.us {
 		if !isStructType(ds, u) { //|| u.Equals(STRING_TYPE) { // CHECKME
 			continue
@@ -233,7 +236,7 @@ func auxI(ds []Decl, omega Omega) bool {
 
 func auxM(ds []Decl, omega Omega) bool {
 	res := false
-	tmp := make(map[string]TNamed)
+	tmp := make(map[string]GroundType)
 	for _, m := range omega.ms {
 		gs := methods(ds, m.u_recv)
 		for _, g := range gs { // Should be only g s.t. g.meth == m.meth
@@ -267,11 +270,12 @@ func auxS(ds []Decl, delta Delta, omega Omega) bool {
 			if !isStructType(ds, u) || !u.ImplsDelta(ds, delta, m.u_recv) {
 				continue
 			}
-			x0, xs, e := body(ds, u, m.meth, m.psi)
+			//x0, xs, e := body(ds, u, m.meth, m.psi)
+			x0, xs, e := body(ds, u.(TNamed), m.meth, m.psi) // TODO CHECK THIS CASTTTTTT <-------------------------------------------
 			gamma := make(GroundGamma)
-			gamma[x0.name] = x0.u.(TNamed)
+			gamma[x0.name] = x0.u.(GroundType)
 			for _, pd := range xs {
-				gamma[pd.name] = pd.u.(TNamed)
+				gamma[pd.name] = pd.u.(GroundType)
 			}
 			m1 := MethInstan{u, m.meth, m.psi}
 			k := toKey_Wm(m1)
@@ -293,7 +297,7 @@ func auxS(ds []Decl, delta Delta, omega Omega) bool {
 // Add embedded types
 func auxE1(ds []Decl, omega Omega) bool {
 	res := false
-	tmp := make(map[string]TNamed)
+	tmp := make(map[string]GroundType)
 	for _, u := range omega.us {
 		if !isNamedIfaceType(ds, u) {  // TODO pôr função que faz esta verificação a retornar logo u_I, td_I
 			continue

@@ -13,11 +13,10 @@ import (
 /* "Exported" constructors for fgg (monomorph) */
 
 func NewVariable(id Name) Variable                    { return Variable{id} }
-func NewStructLit(t Type, es []FGExpr) StructLit      { return StructLit{t, es} }
+func NewStructLit(t TNamed, es []FGExpr) StructLit    { return StructLit{t, es} }
 func NewSelect(e FGExpr, f Name) Select               { return Select{e, f} }
 func NewCall(e FGExpr, m Name, es []FGExpr) Call      { return Call{e, m, es} }
 func NewAssert(e FGExpr, t Type) Assert               { return Assert{e, t} }
-func NewString(v string) StringLit                    { return StringLit{v} }
 func NewSprintf(format string, args []FGExpr) Sprintf { return Sprintf{format, args} }
 
 /* Variable */
@@ -67,13 +66,13 @@ func (x Variable) ToGoString(ds []Decl) string {
 /* StructLit */
 
 type StructLit struct {
-	t_S   Type
+	t_S   TNamed
 	elems []FGExpr
 }
 
 var _ FGExpr = StructLit{}
 
-func (s StructLit) GetType() Type      { return s.t_S }
+func (s StructLit) GetType() TNamed      { return s.t_S }
 func (s StructLit) GetElems() []FGExpr { return s.elems }
 
 func (s StructLit) Subs(subs map[Variable]FGExpr) FGExpr {
@@ -126,12 +125,10 @@ func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExp
 		}
 
 		elems[i] = newSubtree
-		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
 		// corresponding to a value of the expected type (u)
-		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
-			if u_P, ok := u.(TPrimitive); ok {
-				elems[i] = ValueFromLiteral(newSubtree, u_P)
-			}
+		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
+			elems[i] = ConvertLitNode(lit, u)
 		}
 	}
 	return s.t_S, StructLit{s.t_S, elems}
@@ -345,12 +342,10 @@ func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 		}
 
 		args[i] = newSubtree
-		// if newSubtree is a NumericLiteral node, convert it to the Ast node
+		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
 		// corresponding to a value of the expected type (u)
-		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
-			if u_P, ok := u.(TPrimitive); ok {
-				args[i] = ValueFromLiteral(newSubtree, u_P)
-			}
+		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
+			args[i] = ConvertLitNode(lit, u)
 		}
 	}
 	return g.t_ret, Call{e_recv, c.meth, args}
@@ -493,44 +488,7 @@ func (a Assert) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
-/* StringLit, fmt.Sprintf */
-
-type StringLit struct {
-	val string
-}
-
-var _ FGExpr = StringLit{}
-
-func (s StringLit) GetValue() string { return s.val }
-
-func (s StringLit) Subs(subs map[Variable]FGExpr) FGExpr {
-	return s
-}
-
-func (s StringLit) Eval(ds []Decl) (FGExpr, string) {
-	panic("Cannot reduce: " + s.String())
-}
-
-func (s StringLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
-	return STRING_TYPE, s
-}
-
-// From base.Expr
-func (s StringLit) IsValue() bool {
-	return true
-}
-
-func (s StringLit) CanEval(ds []Decl) bool {
-	return false
-}
-
-func (s StringLit) String() string {
-	return "\"" + s.val + "\""
-}
-
-func (s StringLit) ToGoString(ds []Decl) string {
-	return "\"" + s.val + "\""
-}
+/* fmt.Sprintf */
 
 type Sprintf struct {
 	format string // Includes surrounding quotes
@@ -573,7 +531,7 @@ func (s Sprintf) Eval(ds []Decl) (FGExpr, string) {
 		str := fmt.Sprintf(template, cast...)
 		str = strings.ReplaceAll(str, "\"", "") // HACK because StringLit.String() includes quotes
 		// FIXME: currently, user templates cannot include explicit quote chars
-		return StringLit{str}, "Sprintf"
+		return NewStringLit(str), "Sprintf"
 	}
 }
 
@@ -583,7 +541,7 @@ func (s Sprintf) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr)
 	for i := 0; i < len(s.args); i++ {
 		_, args[i] = s.args[i].Typing(ds, gamma, allowStupid)
 	}
-	return STRING_TYPE, Sprintf{s.format, args}
+	return TPrimitive{tag: STRING}, Sprintf{s.format, args}
 }
 
 // From base.Expr

@@ -23,14 +23,6 @@ func NewProgram(ds []Decl, e FGGExpr, printf bool) FGGProgram {
 	return FGGProgram{ds, e, printf}
 }
 
-//func NewSTypeLit(t Name, Psi BigPsi, fds []FieldDecl) STypeLit { return STypeLit{t, Psi, fds} }
-//func NewITypeLit(t_I Name, Psi BigPsi, specs []Spec) ITypeLit {
-//	return ITypeLit{t_I, Psi, specs}
-//}
-
-func NewSTypeLit(fds []FieldDecl) STypeLit { return STypeLit{fds} }
-func NewITypeLit(specs []Spec) ITypeLit    { return ITypeLit{specs} }
-
 func NewTypeDecl(name Name, Psi BigPsi, srcType Type) TypeDecl {
 	return TypeDecl{name, Psi, srcType}
 }
@@ -341,9 +333,8 @@ func (t TypeDecl) GetSourceType() Type { return t.srcType }
 
 func (t TypeDecl) Ok(ds []base.Decl) {
 	// check type formals
-	t.Psi.Ok(ds, PRIMITIVE_PSI.ToDelta()) // TODO HACKED
-	root := makeRootPsi(t.Psi) // TODO is makeRootPsi only needed because of PRIMITIVE_PSI?
-	delta := root.ToDelta()
+	t.Psi.Ok(ds, make(Delta))
+	delta := t.Psi.ToDelta()
 	// check source type
 	t.srcType.Ok(ds, delta)
 
@@ -372,19 +363,10 @@ func (t TypeDecl) String() string {
 	}
 }*/
 
-func makeRootPsi(Psi BigPsi) BigPsi {
-	tFormals := make([]TFormal, len(PRIMITIVE_PSI.tFormals)+len(Psi.tFormals))
-	for i, v := range PRIMITIVE_PSI.tFormals {
-		tFormals[i] = v
-	}
-	for i, v := range Psi.tFormals {
-		tFormals[i+len(PRIMITIVE_PSI.tFormals)] = v
-	}
-	return BigPsi{tFormals}
-}
-
 // For a type declaration decl, searches for any occurrence
-// of decl.GetName() in the target type, recursively
+// of decl.GetName() in the target type.
+// If the target type is a struct/interface type,
+// checks if its underlying type embeds decl.GetName().
 func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type) {
 	switch target := target.(type) {
 	case TParam, TPrimitive:

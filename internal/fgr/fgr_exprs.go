@@ -870,7 +870,7 @@ func (r TRep) Reify() fgg.TNamed {
 	for i := 0; i < len(us); i++ {
 		us[i] = r.args[i].(TRep).Reify() // CHECKME: guaranteed TRep?
 	}
-	return fgg.NewTName(r.t_name, us)
+	return fgg.NewTNamed(r.t_name, us)
 }
 
 func (r TRep) Subs(subs map[Variable]FGRExpr) FGRExpr {

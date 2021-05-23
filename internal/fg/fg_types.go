@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+/* Export */
+
+func NewTNamed(t Name) TNamed                        { return TNamed(t) }
+func NewTPrimitive(t Tag, undefined bool) TPrimitive { return TPrimitive{t, undefined} }
+func NewSTypeLit(fds []FieldDecl) STypeLit           { return STypeLit{fds} }
+func NewITypeLit(ss []Spec) ITypeLit                 { return ITypeLit{ss} }
+
 /******************************************************************************/
 /* Named (defined) types */
 
@@ -45,9 +52,6 @@ func (t0 TNamed) Impls(ds []Decl, t base.Type) bool {
 }
 
 func (t TNamed) Ok(ds []Decl) {
-	if t == STRING_TYPE {
-		return // TODO remove this after removing string hack
-	}
 	getTDecl(ds, Name(t)) // panics if decl not found
 }
 
