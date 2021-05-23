@@ -181,21 +181,27 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, e FGGExpr, omega Nomeg
 			omega.us[k] = u
 			res = true
 		}
-	case StringLit: // CHECKME
-		k := tokeyWtOpen(STRING_TYPE)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = STRING_TYPE
-			res = true // CHECKME
-		}
 	case Sprintf:
-		k := tokeyWtOpen(STRING_TYPE)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = STRING_TYPE
-			res = true
-		}
+		//k := tokeyWtOpen(STRING_TYPE)
+		//if _, ok := omega.us[k]; !ok {
+		//	omega.us[k] = STRING_TYPE
+		//	res = true
+		//}
 		for _, arg := range e1.args {
 			res = collectExprOpen(ds, delta, gamma, arg, omega) || res
 		}
+
+	case BinaryOperation: // TODO is it possible to factor out the repeated code?? <<<<<<<-----------
+		res = collectExprOpen(ds, delta, gamma, e1.left, omega) || res
+		res = collectExprOpen(ds, delta, gamma, e1.right, omega) || res
+	case Comparison:
+		res = collectExprOpen(ds, delta, gamma, e1.left, omega) || res
+		res = collectExprOpen(ds, delta, gamma, e1.right, omega) || res
+	case PrimitiveLiteral, BoolVal, Int32Val, Int64Val, Float32Val, Float64Val, StringVal: // TODO maybe create an interface to represent all primitives <<<<<<<-----------
+		// Do nothing -- these nodes are leafs of the Ast, hence there is no
+		// new type instantiations to be found underneath them.
+		// Besides, there's no reason to collect primitive type 'instances', as
+		// there is only 1 possible 'instance' and it has no methods.
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e).String() + "\n\t" +
 			e.String())

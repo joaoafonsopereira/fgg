@@ -333,9 +333,8 @@ func (t TypeDecl) GetSourceType() Type { return t.srcType }
 
 func (t TypeDecl) Ok(ds []base.Decl) {
 	// check type formals
-	t.Psi.Ok(ds, PRIMITIVE_PSI.ToDelta()) // TODO HACKED
-	root := makeRootPsi(t.Psi) // TODO is makeRootPsi only needed because of PRIMITIVE_PSI?
-	delta := root.ToDelta()
+	t.Psi.Ok(ds, make(Delta))
+	delta := t.Psi.ToDelta()
 	// check source type
 	t.srcType.Ok(ds, delta)
 
@@ -363,17 +362,6 @@ func (t TypeDecl) String() string {
 		u_I.Ok(ds, delta)        // !!! Submission version T-Type, t_i => t_I
 	}
 }*/
-
-func makeRootPsi(Psi BigPsi) BigPsi {
-	tFormals := make([]TFormal, len(PRIMITIVE_PSI.tFormals)+len(Psi.tFormals))
-	for i, v := range PRIMITIVE_PSI.tFormals {
-		tFormals[i] = v
-	}
-	for i, v := range Psi.tFormals {
-		tFormals[i+len(PRIMITIVE_PSI.tFormals)] = v
-	}
-	return BigPsi{tFormals}
-}
 
 // For a type declaration decl, searches for any occurrence
 // of decl.GetName() in the target type.

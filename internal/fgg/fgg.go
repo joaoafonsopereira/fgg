@@ -20,21 +20,6 @@ func IsNamedIfaceType(ds []Decl, u Type) bool    { return isNamedIfaceType(ds, u
 func NewTFormal(name TParam, u_I Type) TFormal   { return TFormal{name, u_I} }
 func NewBigPsi(tFormals []TFormal) BigPsi        { return BigPsi{tFormals} }
 
-/* Constants */
-
-// Hacks
-var STRING_TYPE = TParam("string") // !!! TParam
-var PRIMITIVE_TYPES = make(map[TParam]TParam)
-var PRIMITIVE_PSI BigPsi // Because prim types parsed as TParams, need to check OK
-
-func init() {
-	PRIMITIVE_TYPES[STRING_TYPE] = STRING_TYPE
-	tfs := []TFormal{}
-	for k, v := range PRIMITIVE_TYPES {
-		tfs = append(tfs, TFormal{k, v})
-	}
-	PRIMITIVE_PSI = BigPsi{tfs}
-}
 
 /* Aliases from base */
 
@@ -50,7 +35,7 @@ type Type interface {
 	base.Type
 	ImplsDelta(ds []Decl, delta Delta, u Type) bool
 	TSubs(subs map[TParam]Type) Type // N.B. map is Delta -- factor out a Subs type?
-	SubsEta(eta Eta) TNamed
+	SubsEta(eta Eta) GroundType
 	SubsEtaOpen(eta EtaOpen) Type
 	Ok(ds []Decl, delta Delta)
 	ToGoString(ds []Decl) string
@@ -77,19 +62,25 @@ func (Psi BigPsi) Ok(ds []Decl, env Delta) {
 		env[v.name] = v.u_I
 	} // Delta built
 	for _, v := range Psi.tFormals {
-		u_I, ok := v.u_I.(TNamed)
-		if !ok {
-			if _, foo := PRIMITIVE_TYPES[v.u_I.(TParam)]; !foo { // Only because PRIMITIVE_PSI hacks the upperbound like this
-				panic("Upper bound must be a named interface type: not " + v.u_I.String() +
-					"\n\t" + Psi.String())
-			}
-		} else {
-			if !isNamedIfaceType(ds, u_I) {
-				panic("Upper bound must be a named interface type: not " + v.u_I.String() +
-					"\n\t" + Psi.String())
-			}
-			u_I.Ok(ds, env) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
+		if !isIfaceType(ds, v.u_I) {
+			panic("Upper bound must be an interface type: not " + v.u_I.String() +
+				"\n\t" + Psi.String())
 		}
+		v.u_I.Ok(ds, env) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
+
+		//u_I, ok := v.u_I.(TNamed)
+		//if !ok {
+		//	if _, foo := PRIMITIVE_TYPES[v.u_I.(TParam)]; !foo { // Only because PRIMITIVE_PSI hacks the upperbound like this
+		//		panic("Upper bound must be a named interface type: not " + v.u_I.String() +
+		//			"\n\t" + Psi.String())
+		//	}
+		//} else {
+		//	if !isNamedIfaceType(ds, u_I) {
+		//		panic("Upper bound must be a named interface type: not " + v.u_I.String() +
+		//			"\n\t" + Psi.String())
+		//	}
+		//	u_I.Ok(ds, env) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
+		//}
 	}
 }
 
@@ -129,6 +120,8 @@ type TFormal struct {
 	u_I  Type
 	// CHECKME: submission version, upper bound \tau_I is only "of the form t_I(~\tau)"? -- i.e., not \alpha?
 	// ^If so, then can refine to TNamed
+	//  -> It can also be an interface literal / an anonymous interface, hence
+	//     it's not possible
 }
 
 func (tf TFormal) GetTParam() TParam   { return tf.name }
@@ -175,7 +168,7 @@ func (x0 SmallPsi) Equals(x SmallPsi) bool {
 //type Gamma map[Variable]Type
 type Gamma map[Name]Type
 type Delta map[TParam]Type // Type intended to be an upper bound
-type Eta map[TParam]TNamed // TNamed intended to be a ground
+type Eta map[TParam]GroundType // TNamed intended to be a ground
 
 type EtaOpen map[TParam]Type // cf. Delta
 
@@ -198,7 +191,7 @@ func MakeEta(Psi BigPsi, psi SmallPsi) Eta {
 	eta := make(Eta)
 	tfs := Psi.tFormals
 	for i := 0; i < len(tfs); i++ {
-		eta[tfs[i].name] = psi[i].(TNamed)
+		eta[tfs[i].name] = psi[i].(GroundType) // TODO maybe SmallPsi could be an []GroundType ?
 	}
 	return eta
 }
@@ -254,7 +247,7 @@ type FGGExpr interface {
 
 /* Helpers */
 
-func isValidReceiver(ds []Decl, recv Name) bool {
+func isValidReceiver(ds []Decl, recv Name) bool { // todo aka isStatic, in the sense that it requires no dynamic dispatch for the methods
 	for _, d := range ds {
 		if td, ok := d.(TypeDecl); ok {
 			if td.GetName() == recv {

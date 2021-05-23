@@ -52,9 +52,6 @@ func (t0 TNamed) Impls(ds []Decl, t base.Type) bool {
 }
 
 func (t TNamed) Ok(ds []Decl) {
-	if t == STRING_TYPE {
-		return // TODO remove this after removing string hack
-	}
 	getTDecl(ds, Name(t)) // panics if decl not found
 }
 

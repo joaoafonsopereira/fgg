@@ -2,13 +2,6 @@ package fg
 
 import "github.com/rhu1/fgg/internal/base"
 
-/* Constants */
-
-var STRING_TYPE = TNamed("string")
-
-func init() {
-	//PRIMITIVE_TYPES[STRING_TYPE] = STRING_TYPE
-}
 
 /* Aliases from base */
 
