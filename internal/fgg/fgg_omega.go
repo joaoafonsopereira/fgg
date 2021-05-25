@@ -155,11 +155,12 @@ func collectExpr(ds []Decl, gamma GroundGamma, e FGGExpr, omega Omega) bool {
 		res = collectExpr(ds, gamma, e1.left, omega) || res
 		res = collectExpr(ds, gamma, e1.right, omega) || res
 
-	case PrimitiveLiteral, BoolVal, Int32Val, Int64Val, Float32Val, Float64Val, StringVal: // TODO maybe create an interface to represent all primitives <<<<<<<-----------
+	case PrimtValue:
 		// Do nothing -- these nodes are leafs of the Ast, hence there is no
 		// new type instantiations to be found underneath them.
 		// Besides, there's no reason to collect primitive type 'instances', as
 		// there is only 1 possible 'instance' and it has no methods.
+	//case PrimitiveLiteral, BoolVal, Int32Val, Int64Val, Float32Val, Float64Val, StringVal: // TODO maybe create an interface to represent all primitives <<<<<<<-----------
 
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e).String() + "\n\t" +

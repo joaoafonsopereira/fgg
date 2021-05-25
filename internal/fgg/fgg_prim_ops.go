@@ -102,43 +102,31 @@ func (b BinaryOperation) Eval(ds []Decl) (FGGExpr, string) {
 		return NewBinaryOp(b.left, e, b.op), rule
 	}
 
-	left, right := match(b.left, b.right)
+	left, right := match(b.left, b.right) // panics if not able to match
 
-	switch l := left.(type) {
+	rawRes := rawBinop(left.Val(), right.Val(), b.op)
+
+	switch left := left.(type) {
 	case PrimitiveLiteral:
-		r := right.(PrimitiveLiteral)
-		res := rawBinop(l.payload, r.payload, b.op)
-		return PrimitiveLiteral{res, l.tag}, OpToRule[b.op]
+		return PrimitiveLiteral{rawRes, left.tag}, OpToRule[b.op]
 
 	case BoolVal:
-		r := right.(BoolVal)
-		res := rawBinop(l.val, r.val, b.op).(bool)
-		return BoolVal{res}, OpToRule[b.op]
+		return BoolVal{rawRes.(bool)}, OpToRule[b.op]
 
 	case Int32Val:
-		r := right.(Int32Val)
-		res := rawBinop(l.val, r.val, b.op).(int32)
-		return Int32Val{res}, OpToRule[b.op]
+		return Int32Val{rawRes.(int32)}, OpToRule[b.op]
 
 	case Int64Val:
-		r := right.(Int64Val)
-		res := rawBinop(l.val, r.val, b.op).(int64)
-		return Int64Val{res}, OpToRule[b.op]
+		return Int64Val{rawRes.(int64)}, OpToRule[b.op]
 
 	case Float32Val:
-		r := right.(Float32Val)
-		res := rawBinop(l.val, r.val, b.op).(float32)
-		return Float32Val{res}, OpToRule[b.op]
+		return Float32Val{rawRes.(float32)}, OpToRule[b.op]
 
 	case Float64Val:
-		r := right.(Float64Val)
-		res := rawBinop(l.val, r.val, b.op).(float64)
-		return Float64Val{res}, OpToRule[b.op]
+		return Float64Val{rawRes.(float64)}, OpToRule[b.op]
 
 	case StringVal:
-		r := right.(StringVal)
-		res := rawBinop(l.val, r.val, b.op).(string)
-		return StringVal{res}, OpToRule[b.op]
+		return StringVal{rawRes.(string)}, OpToRule[b.op]
 
 	}
 	panic("Unsupported binary operation: " +
@@ -200,43 +188,9 @@ func (c Comparison) Eval(ds []Decl) (FGGExpr, string) {
 		return NewBinaryOp(c.left, e, c.op), rule
 	}
 
-	left, right := match(c.left, c.right)
-
-	// TODO seems like most of this code is repeated; maybe refactor, smthing like a method .Val()
-	switch l := left.(type) {
-	case PrimitiveLiteral: // left & right are both PrimitiveLiterals
-		r := right.(PrimitiveLiteral)
-		res := rawBinop(l.payload, r.payload, c.op).(bool)
-		return BoolVal{res}, OpToRule[c.op]
-
-	case Int32Val:
-		r := right.(Int32Val)
-		res := rawBinop(l.val, r.val, c.op).(bool)
-		return BoolVal{res}, OpToRule[c.op]
-
-	case Int64Val:
-		r := right.(Int64Val)
-		res := rawBinop(l.val, r.val, c.op).(bool)
-		return BoolVal{res}, OpToRule[c.op]
-
-	case Float32Val:
-		r := right.(Float32Val)
-		res := rawBinop(l.val, r.val, c.op).(bool)
-		return BoolVal{res}, OpToRule[c.op]
-
-	case Float64Val:
-		r := right.(Float64Val)
-		res := rawBinop(l.val, r.val, c.op).(bool)
-		return BoolVal{res}, OpToRule[c.op]
-
-	case StringVal:
-		r := right.(StringVal)
-		res := rawBinop(l.val, r.val, c.op).(bool)
-		return BoolVal{res}, OpToRule[c.op]
-	}
-
-	panic("Unsupported comparison: " +
-		c.left.String() + " " + string(c.op) + " " + c.right.String())
+	left, right := match(c.left, c.right) // panics if not able to match
+	res := rawBinop(left.Val(), right.Val(), c.op).(bool)
+	return BoolVal{res}, OpToRule[c.op]
 }
 
 func (c Comparison) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
@@ -337,23 +291,17 @@ func rawBinop(left, right interface{}, op Operator) interface{} {
 // returns the one with the 'highest' tag.
 //
 // Pre: x and y are compatible (match can only be invoked during Eval, i.e. after Typing)
-func match(x, y FGGExpr) (FGGExpr, FGGExpr) {
+func match(x, y FGGExpr) (PrimtValue, PrimtValue) {
 	switch xx := x.(type) {
-
-	case BoolVal, StringVal:
-		return x, y // y has the same type for sure (or Typing wouldn't succeed)
-
 	case PrimitiveLiteral:
-		if yy, ok := y.(PrimitiveLiteral); ok {
+		if yy, ok := y.(PrimitiveLiteral); ok { // both primitive literals
 			t := maxTag(xx.tag, yy.tag)
-
-			if t == INT32 || t == INT64 {
-				return PrimitiveLiteral{xx.payload, t},
-					PrimitiveLiteral{yy.payload, t}
-			}
 			if t == FLOAT32 || t == FLOAT64 {
 				return PrimitiveLiteral{anyToFloat64(xx.payload), t},
 					PrimitiveLiteral{anyToFloat64(yy.payload), t}
+			} else {
+				return PrimitiveLiteral{xx.payload, t},
+					PrimitiveLiteral{yy.payload, t}
 			}
 		} else {
 			// invert -- will fall into one of the cases below
@@ -361,6 +309,8 @@ func match(x, y FGGExpr) (FGGExpr, FGGExpr) {
 			return x, y
 		}
 
+	case BoolVal:
+		return xx, makeBoolVal(y)
 	case Int32Val:
 		return xx, makeInt32Val(y)
 	case Int64Val:
@@ -369,6 +319,8 @@ func match(x, y FGGExpr) (FGGExpr, FGGExpr) {
 		return xx, makeFloat32Val(y)
 	case Float64Val:
 		return xx, makeFloat64Val(y)
+	case StringVal:
+		return xx, makeStringVal(y)
 	}
 
 	panic("Can't match " + x.String() + " with " + y.String())
@@ -381,6 +333,6 @@ func anyToFloat64(x interface{}) float64 {
 	case float64:
 		return xx
 	default:
-		panic("anyToFloat64: unsupported type masked as Any")
+		panic("anyToFloat64: unsupported type " + reflect.TypeOf(x).String())
 	}
 }
