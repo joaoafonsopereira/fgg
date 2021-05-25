@@ -64,9 +64,9 @@ func NewStringVal(val string) StringVal    { return StringVal{val} }
 
 /* Remaining "exported" constructors */
 
-func NewBool(lit string) BoolVal {
+func NewBool(lit string) PrimitiveLiteral {
 	b, _ := strconv.ParseBool(lit)
-	return BoolVal{b}
+	return PrimitiveLiteral{b, BOOL}
 }
 
 func NewIntLit(lit string) PrimitiveLiteral {
@@ -93,9 +93,9 @@ func NewFloatLit(lit string) PrimitiveLiteral {
 	}
 }
 
-func NewStringLit(lit string) StringVal {
+func NewStringLit(lit string) PrimitiveLiteral {
 	trim := strings.ReplaceAll(lit, "\"", "")
-	return StringVal{trim}
+	return PrimitiveLiteral{trim, STRING}
 }
 
 		return makeInt64Val(n)
@@ -104,8 +104,31 @@ func NewStringLit(lit string) StringVal {
 	case FLOAT64:
 		return makeFloat64Val(n)
 	}
+/******************************************************************************/
+/* PrimtValue - base interface for primitive values */
+
+type PrimtValue interface {
+	Val() interface{}
+	//Typ() Type
+}
+
+func (x PrimitiveLiteral) Val() interface{}      { return x.payload }
+func (x NamedPrimitiveLiteral) Val() interface{} { return x.payload }
+func (x BoolVal) Val() interface{}               { return x.val }
+func (x Int32Val) Val() interface{}              { return x.val }
+func (x Int64Val) Val() interface{}              { return x.val }
+func (x Float32Val) Val() interface{}            { return x.val }
+func (x Float64Val) Val() interface{}            { return x.val }
+func (x StringVal) Val() interface{}             { return x.val }
+
+
+/******************************************************************************/
+
 	panic("Unexpected declared type for " + n.String() + ": " + decldType.String())
 }
+
+
+
 
 /******************************************************************************/
 /* PrimitiveLiteral */
@@ -145,6 +168,10 @@ func (b PrimitiveLiteral) CanEval([]base.Decl) bool {
 func (b PrimitiveLiteral) String() string {
 	var payload string
 	switch p := b.payload.(type) {
+	case bool:
+		payload = strconv.FormatBool(p)
+	case string:
+		payload = p
 	case int64:
 		payload = strconv.FormatInt(p, 10)
 	case float64:
@@ -295,6 +322,16 @@ func maxTag(t1, t2 Tag) Tag {
 }
 
 /* Accessors -- return underlying value of a FGExpr */
+
+func makeBoolVal(expr FGExpr) BoolVal {
+	switch e := expr.(type) {
+	case BoolVal:
+		return e
+	case PrimitiveLiteral:
+		return BoolVal{e.payload.(bool)}
+	}
+	panic("Expr " + expr.String() + " is not a bool")
+}
 
 func makeInt32Val(expr FGExpr) Int32Val {
 	switch e := expr.(type) {
