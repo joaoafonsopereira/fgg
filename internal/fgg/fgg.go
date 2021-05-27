@@ -247,33 +247,16 @@ type FGGExpr interface {
 
 /* Helpers */
 
-func isValidReceiver(ds []Decl, recv Name) bool { // todo aka isStatic, in the sense that it requires no dynamic dispatch for the methods
-	for _, d := range ds {
-		if td, ok := d.(TypeDecl); ok {
-			if td.GetName() == recv {
-				return !isIfaceType(ds, td.GetSourceType())
-			}
-		}
-	}
-	return false
-}
-
-// TODO unify this function and the next into one
-func isStructTypeBase(ds []Decl, t Type) bool {
-	under := t.Underlying(ds)
-	_, ok := under.(STypeLit)
-	return ok
-}
-
 // Check if u is a \tau_S -- implicitly must be a TNamed
 func isStructType(ds []Decl, u Type) bool {
-	return isStructTypeBase(ds, u) // TODO substituir usos de isStructType por isValidReceiver (na maior parte dos casos é a última que se quer) -- tentar até arranjar um nome melhor
+	_, ok := u.Underlying(ds).(STypeLit)
+	return ok
+	//return isStructTypeBase(ds, u) // TODO substituir usos de isStructType por isValidReceiver (na maior parte dos casos é a última que se quer) -- tentar até arranjar um nome melhor
 }
 
 // TODO unify this function and the next into one
 func isNamedIfaceTypeBase(ds []Decl, u Type) bool {
-	under := u.Underlying(ds)
-	_, ok := under.(ITypeLit)
+	_, ok := u.Underlying(ds).(ITypeLit)
 	return ok
 }
 
@@ -287,6 +270,13 @@ func isNamedIfaceType(ds []Decl, u Type) bool {
 
 func isIfaceType(ds []Decl, u Type) bool {
 	return isNamedIfaceTypeBase(ds, u)
+}
+
+// checks if u is a u_J
+func isIfaceLikeType(ds []Decl, u Type) bool {
+	isIface := isIfaceType(ds, u)
+	_, isTParam := u.(TParam)
+	return isIface || isTParam
 }
 
 func writeTypes(b *strings.Builder, us []Type) {

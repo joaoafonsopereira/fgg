@@ -157,28 +157,22 @@ func (md MethDecl) GetReturn() Type            { return md.u_ret }
 func (md MethDecl) GetBody() FGGExpr           { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
-	if !isValidReceiver(ds, md.t_recv) {
+	// (type t_S(Phi') T ) ∈ D
+	recv_decl := getTDecl(ds, md.t_recv) // panics if not found
+	if isIfaceType(ds, recv_decl.GetSourceType()) {
 		panic("Invalid receiver type: " + md.t_recv +
 			"\n\t" + md.String())
 	}
-
-	md.Psi_recv.Ok(ds, make(Delta))
-	delta := md.Psi_recv.ToDelta()
-	md.Psi_meth.Ok(ds, delta)
-	for _, v := range md.Psi_meth.tFormals {
-		delta[v.name] = v.u_I
-	}
-
-	td := getTDecl(ds, md.t_recv) // panics if not found
-	tfs_td := td.GetBigPsi().tFormals
+	// Phi <: Phi'
+	tfs_td := recv_decl.GetBigPsi().tFormals
 	if len(tfs_td) != len(md.Psi_recv.tFormals) {
 		panic("Receiver type parameter arity mismatch:\n\tmdecl=" + md.t_recv +
-			md.Psi_recv.String() + ", tdecl=" + td.GetName() +
-			"\n\t" + td.GetBigPsi().String())
+			md.Psi_recv.String() + ", tdecl=" + recv_decl.GetName() +
+			"\n\t" + recv_decl.GetBigPsi().String())
 	}
 	for i := 0; i < len(tfs_td); i++ {
 		subs_md := makeParamIndexSubs(md.Psi_recv)
-		subs_td := makeParamIndexSubs(td.GetBigPsi())
+		subs_td := makeParamIndexSubs(recv_decl.GetBigPsi())
 		if !md.Psi_recv.tFormals[i].u_I.TSubs(subs_md). // Canonicalised
 								Impls(ds, tfs_td[i].u_I.TSubs(subs_td)) {
 			panic("Receiver parameter upperbound not a subtype of type decl upperbound:" +
@@ -186,7 +180,14 @@ func (md MethDecl) Ok(ds []Decl) {
 				tfs_td[i].String())
 		}
 	}
-
+	// Phi, Psi ok
+	md.Psi_recv.Ok(ds, make(Delta))
+	delta := md.Psi_recv.ToDelta()
+	md.Psi_meth.Ok(ds, delta)
+	for _, v := range md.Psi_meth.tFormals {
+		delta[v.name] = v.u_I
+	}
+	// distinct; params ok; construct gamma for body typing
 	as := md.Psi_recv.Hat()                          // !!! submission version, x:t_S(a) => x:t_S(~a)
 	gamma := Gamma{md.x_recv: TNamed{md.t_recv, as}} // CHECKME: can we give the bounds directly here instead of 'as'?
 	seen := make(map[Name]Name)

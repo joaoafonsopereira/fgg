@@ -133,10 +133,13 @@ func (md MethDecl) GetReturn() Type            { return md.t_ret }
 func (md MethDecl) GetBody() FGExpr            { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
-	if !isStructType(ds, md.recv.t) {
-		panic("Receiver must be a struct type: not " + md.recv.t.String() +
+	md.recv.t.Ok(ds)
+
+	if isInterfaceType(ds, md.recv.t) {
+		panic("Invalid receiver type: " + md.recv.t.String() +
 			"\n\t" + md.String())
 	}
+	// distinct, params ok
 	env := Gamma{md.recv.name: md.recv.t}
 	for _, v := range md.pDecls {
 		if _, ok := env[v.name]; ok {

@@ -143,6 +143,20 @@ func body(ds []Decl, u_S TNamed, m Name, targs []Type) (ParamDecl, []ParamDecl, 
 	panic("Method not found: " + u_S.String() + "." + m)
 }
 
+// Represents the aux function type() defined in fig.16 of the paper.
+// Returns the exact run-time type of a value expression.
+func dynamicType(e FGGExpr) Type {
+	switch e1 := e.(type) {
+	case StructLit:
+		return e1.u_S
+	case NamedPrimitiveLiteral:
+		return e1.typ
+	case PrimtValue:
+		panic("dynamicType(PrimtValue) not defined") // todo <<<<--------------------
+	}
+	panic("dynamicType: expression is not a value: " + e.String())
+}
+
 /* Additional */
 
 func getTDecl(ds []Decl, t Name) TypeDecl {

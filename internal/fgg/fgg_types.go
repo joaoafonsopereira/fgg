@@ -15,7 +15,6 @@ func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
 func NewSTypeLit(fds []FieldDecl) STypeLit       { return STypeLit{fds} }
 func NewITypeLit(specs []Spec) ITypeLit          { return ITypeLit{specs} }
 
-
 /* Ground types -- todo move */
 
 var _ GroundType = TNamed{}
@@ -37,9 +36,8 @@ func (t TNamed) isGround() bool {
 }
 
 func (t TPrimitive) isGround() bool { return true }
-func (t STypeLit) isGround() bool { return true }
-func (t ITypeLit) isGround() bool { return true }
-
+func (t STypeLit) isGround() bool   { return true }
+func (t ITypeLit) isGround() bool   { return true }
 
 /* Type parameters */
 
@@ -57,21 +55,7 @@ func (a TParam) TSubs(subs map[TParam]Type) Type {
 	return res
 }
 
-//func (a TParam) SubsEta(eta Eta) TNamed {
-//	if _, ok := PRIMITIVE_TYPES[a]; ok {
-//		return STRING_TYPE_MONOM // HACK TODO: refactor prims map as TParam->TNamed (map to monom rep)
-//	}
-//	res, ok := eta[a]
-//	if !ok {
-//		panic("Shouldn't get here: " + a)
-//	}
-//	return res
-//}
-
 func (a TParam) SubsEta(eta Eta) GroundType {
-	//if _, ok := PRIMITIVE_TYPES[a]; ok {
-	//	return NewGroundType(STRING_TYPE_MONOM) // HACK TODO: refactor prims map as TParam->TNamed (map to monom rep)
-	//}
 	res, ok := eta[a]
 	if !ok {
 		panic("Shouldn't get here: " + a)
@@ -295,7 +279,7 @@ func (u TNamed) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
-func (u TNamed) Underlying(ds []Decl) Type {  // TODO checkar a cena de fazer TSubs logo no underlying
+func (u TNamed) Underlying(ds []Decl) Type { // TODO checkar a cena de fazer TSubs logo no underlying
 	decl := getTDecl(ds, u.t_name)
 	under := decl.GetSourceType().Underlying(ds)
 	// the underlying type itself may have type variables, as in e.g.

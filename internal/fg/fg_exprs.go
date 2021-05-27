@@ -304,8 +304,9 @@ func (c Call) Eval(ds []Decl) (FGExpr, string) {
 		return Call{c.e_recv, c.meth, args}, rule
 	}
 	// c.e and c.args all values
-	s := c.e_recv.(StructLit)
-	x0, xs, e := body(ds, s.t_S, c.meth) // panics if method not found
+	t := dynamicType(c.e_recv).(TNamed)
+	x0, xs, e := body(ds, t, c.meth) // panics if method not found
+
 	subs := make(map[Variable]FGExpr)
 	subs[Variable{x0}] = c.e_recv
 	for i := 0; i < len(xs); i++ {
@@ -422,10 +423,10 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 		e, rule := a.e_I.Eval(ds)
 		return Assert{e.(FGExpr), a.t_cast}, rule
 	}
-	t_S := a.e_I.(StructLit).t_S
-	if !isStructType(ds, t_S) {
-		panic("Non struct type found in struct lit: " + t_S.String())
-	}
+	t_S := dynamicType(a.e_I)
+	//if !isStructType(ds, t_S) { todo why this check??
+	//	panic("Non struct type found in struct lit: " + t_S.String())
+	//}
 	if t_S.Impls(ds, a.t_cast) {
 		return a.e_I, "Assert"
 	}
@@ -433,10 +434,10 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 }
 
 func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	a.t_cast.Ok(ds)
 	t, e_I := a.e_I.Typing(ds, gamma, allowStupid)
 	newAst := Assert{e_I, a.t_cast}
-	a.t_cast.Ok(ds)
-	if isStructType(ds, t) { // TODO check here: should this check the general case or only struct types?
+	if !isInterfaceType(ds, t) {
 		if allowStupid {
 			return a.t_cast, newAst
 		} else {
@@ -448,7 +449,7 @@ func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) 
 	if isInterfaceType(ds, a.t_cast) {
 		return a.t_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
 	}
-	// a.t is a struct type
+	// a.t_cast might be a named (non-interface) or a primitive type
 	if a.t_cast.Impls(ds, t) {
 		return a.t_cast, newAst
 	}
@@ -467,7 +468,7 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return a.e_I.(StructLit).t_S.Impls(ds, a.t_cast)
+	return dynamicType(a.e_I).Impls(ds, a.t_cast)
 }
 
 func (a Assert) String() string {
