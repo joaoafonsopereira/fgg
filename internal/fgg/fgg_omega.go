@@ -188,12 +188,42 @@ func auxG(ds []Decl, omega Omega) bool {
 	res = auxE1(ds, omega) || res
 	res = auxE2(ds, omega) || res
 	//res = auxP(ds, omega) || res
+	res = auxT(ds, omega) || res
 	return res
 }
 
-// TODO devia checkar tbm declarações do estilo: e.g. regra auxT
-// type Pair[X any, Y any] struct { x X; y Y}
-// type PairInt Pair[int, int]     <---
+//Pair := "type Pair(type X Any(), Y Any()) struct { x X; y Y}"
+//PairInt := "type PairInt(type ) Pair(int32, int32)"
+//
+//Pair := "type Pair(type X Any(), Y Any()) struct { x X; y Y}"
+//PairEq := "type PairEq(type T Any()) Pair(T, T)"
+//PairInt := "type PairInt(type ) PairEq(int32)"
+
+func auxT(ds []Decl, omega Omega) bool {
+	res := false
+	tmp := make(map[string]GroundType)
+	for _, u := range omega.us {
+		u_N, isTNamed := u.(TNamed)
+		if !isTNamed {
+			continue
+		}
+		td := getTDecl(ds, u_N.t_name)
+		if src, ok := td.GetSourceType().(TNamed); ok {
+			eta := MakeEta(td.GetBigPsi(), u_N.GetTArgs())
+			ground_src := src.SubsEta(eta)
+			tmp[toKey_Wt(ground_src)] = ground_src
+		}
+	}
+	// TODO factor this cycle into a function ?
+	for k, v := range tmp {
+		if _, ok := omega.us[k]; !ok {
+			omega.us[k] = v
+			res = true
+		}
+	}
+	return res
+}
+
 func auxF(ds []Decl, omega Omega) bool {
 	res := false
 	tmp := make(map[string]GroundType)

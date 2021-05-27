@@ -182,3 +182,25 @@ func Test111(t *testing.T) {
 	testutils.EvalAndOkGood(t, prog, 3)
 	_ = prog
 }
+// Testing cases where the only instantiation of a generic type
+// appears in the definition of another type.
+func Test200(t *testing.T) {
+	Any := "type Any(type ) interface {}"
+	Pair := "type Pair(type X Any(), Y Any()) struct { x X; y Y}"
+	PairInt := "type PairInt(type ) Pair(int32, int32)"
+	e := "PairInt(){1,2}.x + 1"
+	prog := fggParseAndOkMonomGood(t, Any, Pair, PairInt, e)
+	testutils.EvalAndOkGood(t, prog, 2)
+	_ =  prog
+}
+
+func Test200b(t *testing.T) {
+	Any := "type Any(type ) interface {}"
+	Pair := "type Pair(type X Any(), Y Any()) struct { x X; y Y}"
+	PairEq := "type PairEq(type T Any()) Pair(T, T)"
+	PairInt := "type PairInt(type ) PairEq(int32)"
+	e := "PairInt(){1,2}.x + 1"
+	prog := fggParseAndOkMonomGood(t, Any, Pair, PairEq, PairInt, e)
+	testutils.EvalAndOkGood(t, prog, 2)
+	_ =  prog
+}
