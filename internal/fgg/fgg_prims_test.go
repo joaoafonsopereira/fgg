@@ -168,3 +168,17 @@ func Test025b(t *testing.T) {
 	prog := fggParseAndOkGood(t, A, AFact, MyString, Am, e)
 	testutils.EvalAndOkGood(t, prog, 3)
 }
+
+
+// Testing case where a variable (e.g. a struct field) has an interface
+// literal - containing a generic method spec -  as its declared type.
+func Test111(t *testing.T) {
+	Any := "type Any(type ) interface {}"
+	A := "type A(type ) struct { x interface{ id(type T Any())(x T) T } }  "
+	SFoo := "type SFoo1(type ) struct {}"
+	SFoof := "func (s SFoo1(type )) id(type T Any())(x T) T { return x }"
+	e := "A(){SFoo1(){}}.x.id(int32)(1)"
+	prog := fggParseAndOkMonomGood(t, Any, A, SFoo, SFoof, e)
+	testutils.EvalAndOkGood(t, prog, 3)
+	_ = prog
+}

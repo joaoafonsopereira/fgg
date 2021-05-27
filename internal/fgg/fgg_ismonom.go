@@ -341,10 +341,17 @@ func auxE1Open(ds []Decl, omega Nomega) bool {
 		if !isNamedIfaceType(ds, u) { // CHECKME: type param
 			continue
 		}
+
+		//u_I := u.Underlying(ds).(ITypeLit) // TOdO underlying já inclui essa subs
+		//for _, s := range u_I.GetSpecs() {
+		//	if u_emb, ok := s.(TNamed); ok {
+		//		tmp[tokeyWtOpen(u_emb)] = u_emb
+		//	}
+		//}
 		u_I := u.(TNamed)
-		td_I := getTDecl(ds, u_I.t_name).(ITypeLit)
+		td_I := getTDecl(ds, u_I.t_name)
 		eta := MakeEtaOpen(td_I.Psi, u_I.u_args)
-		for _, s := range td_I.specs {
+		for _, s := range u_I.Underlying(ds).(ITypeLit).specs { // todo check underlying <<<-----------
 			if u_emb, ok := s.(TNamed); ok {
 				u_sub := u_emb.SubsEtaOpen(eta).(TNamed)
 				tmp[tokeyWtOpen(u_sub)] = u_sub
@@ -368,10 +375,11 @@ func auxE2Open(ds []Decl, omega Nomega) bool {
 		if !isNamedIfaceType(ds, m.u_recv) { // CHECKME: type param
 			continue
 		}
-		u_I := m.u_recv.(TNamed)
-		td_I := getTDecl(ds, u_I.t_name).(ITypeLit)
+		u_I := m.u_recv.(TNamed) // TODO check these substitutionssssssssss
+		td_I := getTDecl(ds, u_I.t_name)
 		eta := MakeEtaOpen(td_I.Psi, u_I.u_args)
-		for _, s := range td_I.specs {
+		//for _, s := range td_I.specs {
+		for _, s := range u_I.Underlying(ds).(ITypeLit).specs {
 			if u_emb, ok := s.(TNamed); ok {
 				u_sub := u_emb.SubsEtaOpen(eta).(TNamed)
 				gs := methods(ds, u_sub)

@@ -66,7 +66,14 @@ func (w Omega) Println() {
 }
 
 type MethInstan struct {
-	u_recv GroundType // Pre: isGround
+	// u_recv can't be refined into a TNamed: have to account for the case
+	// where a variable (e.g. a struct field) has an interface literal as its
+	// declared type. This 'anonymous' interface may itself have generic methods
+	// for which we also have to collect the method instances -- cf. Test111
+	// in fgg_prims_test.go.
+	// N.B the anonymous interface itself is a ground type.
+	u_recv GroundType
+	//u_recv TNamed // Pre: isGround
 	meth   Name
 	psi    SmallPsi // Pre: all isGround
 }
@@ -188,16 +195,28 @@ func auxG(ds []Decl, omega Omega) bool {
 	return res
 }
 
+// TODO devia checkar tbm declarações do estilo: e.g. regra auxT
+// type Pair[X any, Y any] struct { x X; y Y}
+// type PairInt Pair[int, int]     <---
 func auxF(ds []Decl, omega Omega) bool {
 	res := false
 	tmp := make(map[string]GroundType)
 	for _, u := range omega.us {
-		if !isStructType(ds, u) { //|| u.Equals(STRING_TYPE) { // CHECKME
-			continue
-		}
-		for _, u_f := range Fields(ds, u) {
-			cast := u_f.u.(TNamed)
-			tmp[toKey_Wt(cast)] = cast
+		//if !isStructType(ds, u) { //|| u.Equals(STRING_TYPE) { // CHECKME
+		//	continue
+		//}
+		//for _, u_f := range Fields(ds, u) {
+		//	cast := u_f.u.(TNamed)
+		//	tmp[toKey_Wt(cast)] = cast
+		//}
+		if u_S, ok := u.Underlying(ds).(STypeLit); ok {
+			for _, u_f := range u_S.GetFieldDecls() {
+				// TODO se for um TPrimitive quero add a Omega na mesma??
+
+				//ground := u_f.u.(TNamed) // TODO  ground pode n ser um TNamed, e ser um TypeLit instead <<-------------------
+				ground := u_f.u.(GroundType)
+				tmp[toKey_Wt(ground)] = ground
+			}
 		}
 	}
 	for k, v := range tmp {
@@ -268,7 +287,12 @@ func auxS(ds []Decl, delta Delta, omega Omega) bool {
 	clone := omega.clone()
 	for _, m := range clone.ms {
 		for _, u := range clone.us {
-			if !isStructType(ds, u) || !u.ImplsDelta(ds, delta, m.u_recv) {
+			u_N, ok := u.(TNamed)
+			if !ok || isIfaceType(ds, u_N) || !u.ImplsDelta(ds, delta, m.u_recv) {
+				continue
+			}
+
+			if !isStructType(ds, u) || !u.ImplsDelta(ds, delta, m.u_recv) { // TODO nao basta checkar structType; pode ser p.ex. um MyInt
 				continue
 			}
 			//x0, xs, e := body(ds, u, m.meth, m.psi)
@@ -300,18 +324,30 @@ func auxE1(ds []Decl, omega Omega) bool {
 	res := false
 	tmp := make(map[string]GroundType)
 	for _, u := range omega.us {
-		if !isNamedIfaceType(ds, u) {  // TODO pôr função que faz esta verificação a retornar logo u_I, td_I
-			continue
-		}
-		u_I := u.Underlying(ds).(ITypeLit)
-		td_I := getTDecl(ds, u.t_name)
-		eta := MakeEta(td_I.Psi, u.u_args) //  TODO IS THIS SUBS NECESSARY AFTER Underlying() ?
-		for _, s := range u_I.specs {
-			if u_emb, ok := s.(TNamed); ok {
-				u_sub := u_emb.SubsEta(eta)
-				tmp[toKey_Wt(u_sub)] = u_sub
+
+
+		//if !isNamedIfaceType(ds, u) {  // TODO pôr função que faz esta verificação a retornar logo u_I, td_I
+		//	continue
+		//}
+		//u_I := u.Underlying(ds).(ITypeLit)
+		//td_I := getTDecl(ds, u.t_name)
+		//eta := MakeEta(td_I.Psi, u.u_args) //  TODO IS THIS SUBS NECESSARY AFTER Underlying() ?
+		//for _, s := range u_I.specs {
+		//	if u_emb, ok := s.(TNamed); ok {
+		//		//u_sub := u_emb.SubsEta(eta)
+		//		u_sub := NewGroundType(u_emb.SubsEta(eta))
+		//		tmp[toKey_Wt(u_sub)] = u_sub
+		//	}
+		//}
+
+		if u_I, ok := u.Underlying(ds).(ITypeLit); ok {
+			for _, s := range u_I.specs {
+				if u_emb, ok := s.(TNamed); ok {
+					tmp[toKey_Wt(u_emb)] = u_emb // TODO CHECK THIS: ASSUME QUE SUBST. JÁ FOI FEITA
+				}
 			}
 		}
+
 	}
 	for k, v := range tmp {
 		if _, ok := omega.us[k]; !ok {
@@ -327,24 +363,41 @@ func auxE2(ds []Decl, omega Omega) bool {
 	res := false
 	tmp := make(map[string]MethInstan)
 	for _, m := range omega.ms {
-		if !isNamedIfaceType(ds, m.u_recv) {
+		//if !isNamedIfaceType(ds, m.u_recv) {
+		//	continue
+		//}
+		//u_I := m.u_recv.Underlying(ds).(ITypeLit) // TODO IS THIS SUBS NEEDED? OR IS IT ALREADY BEING APPLIED IN Underlying()?
+		//td_I := getTDecl(ds, m.u_recv.t_name)
+		//eta := MakeEta(td_I.Psi, m.u_recv.u_args)
+		//for _, s := range u_I.specs {
+		//	if u_emb, ok := s.(TNamed); ok {
+		//		u_sub := u_emb.SubsEta(eta)
+		//		gs := methods(ds, u_sub)
+		//		for _, g := range gs {
+		//			if m.meth == g.meth {
+		//				m_emb := MethInstan{u_sub, m.meth, m.psi}
+		//				tmp[toKey_Wm(m_emb)] = m_emb
+		//			}
+		//		}
+		//	}
+		//}
+
+		u_I, ok := m.u_recv.Underlying(ds).(ITypeLit)
+		if !ok {
 			continue
 		}
-		u_I := m.u_recv.Underlying(ds).(ITypeLit) // TODO IS THIS SUBS NEEDED? OR IS IT ALREADY BEING APPLIED IN Underlying()?
-		td_I := getTDecl(ds, m.u_recv.t_name)
-		eta := MakeEta(td_I.Psi, m.u_recv.u_args)
-		for _, s := range u_I.specs {
+		for _, s := range u_I.GetSpecs() {
 			if u_emb, ok := s.(TNamed); ok {
-				u_sub := u_emb.SubsEta(eta)
-				gs := methods(ds, u_sub)
+				gs := methods(ds, u_emb)
 				for _, g := range gs {
 					if m.meth == g.meth {
-						m_emb := MethInstan{u_sub, m.meth, m.psi}
+						m_emb := MethInstan{u_emb, m.meth, m.psi}
 						tmp[toKey_Wm(m_emb)] = m_emb
 					}
 				}
 			}
 		}
+
 	}
 	for k, v := range tmp {
 		if _, ok := omega.ms[k]; !ok {
