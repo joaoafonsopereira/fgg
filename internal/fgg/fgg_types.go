@@ -601,7 +601,33 @@ func (i ITypeLit) Ok(ds []Decl, delta Delta) {
 }
 
 func (i ITypeLit) Equals(t base.Type) bool {
-	panic("implement me")
+	other, ok := t.(ITypeLit)
+	if !ok {
+		return false
+	}
+
+	// goal: methodSet(i) == methodSet(other), regardless of order
+	// > this version is still sensible to order
+	for idx, spec := range i.specs {
+		if !specEquals(spec, other.specs[idx]) {
+			return false
+		}
+	}
+	return true
+}
+
+func specEquals(s1, s2 Spec) bool {
+	switch s1 := s1.(type) {
+	case TNamed:
+		if named, ok := s2.(TNamed); ok {
+			return s1.Equals(named)
+		}
+	case Sig:
+		if g2, ok := s2.(Sig); ok {
+			return sigAlphaEquals(s1, g2)
+		}
+	}
+	return false
 }
 
 func (i ITypeLit) String() string {
