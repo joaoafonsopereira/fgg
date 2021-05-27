@@ -110,6 +110,10 @@ func (b BinaryOperation) Eval(ds []Decl) (FGGExpr, string) {
 	case PrimitiveLiteral:
 		return PrimitiveLiteral{rawRes, left.tag}, OpToRule[b.op]
 
+	case NamedPrimitiveLiteral:
+		primLit := PrimitiveLiteral{rawRes, left.tag}
+		return NamedPrimitiveLiteral{primLit, left.typ}, OpToRule[b.op]
+
 	case BoolVal:
 		return BoolVal{rawRes.(bool)}, OpToRule[b.op]
 
@@ -321,6 +325,8 @@ func match(x, y FGGExpr) (PrimtValue, PrimtValue) {
 		return xx, makeFloat64Val(y)
 	case StringVal:
 		return xx, makeStringVal(y)
+	case NamedPrimitiveLiteral:
+		return xx, makeNamedPrimtLiteral(y, xx.typ)
 	}
 
 	panic("Can't match " + x.String() + " with " + y.String())

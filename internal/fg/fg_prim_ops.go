@@ -106,6 +106,10 @@ func (b BinaryOperation) Eval(ds []Decl) (FGExpr, string) {
 	case PrimitiveLiteral:
 		return PrimitiveLiteral{rawRes, left.tag}, OpToRule[b.op]
 
+	case NamedPrimitiveLiteral:
+		primLit := PrimitiveLiteral{rawRes, left.tag}
+		return NamedPrimitiveLiteral{primLit, left.typ}, OpToRule[b.op]
+
 	case BoolVal:
 		return BoolVal{rawRes.(bool)}, OpToRule[b.op]
 

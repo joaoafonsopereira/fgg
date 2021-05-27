@@ -145,6 +145,26 @@ func Test024b(t *testing.T) {
 	testutils.EvalAndOkGood(t, prog, 1)
 }
 
-	//prog := fggParseAndOkGood(t, Any, A, Am, e)
-	//testutils.EvalAndOkGood(t, prog, 4)
+// Test primitive ops with defined/named types
+func Test025(t *testing.T) {
+	A := "type A(type ) struct {}"
+	AFact :="func (a A(type )) NewMyInt(type )(x MyInt()) MyInt() {return x}"
+	MyInt := "type MyInt(type ) int32"
+	Am := "func (x MyInt(type )) incr(type )() MyInt() {return x + 1}"
+	e := "A(){}.NewMyInt()(1).incr()()"
+	//fggParseAndOkGood(t, A, AFact, MyInt, Am, e)
+	prog := fggParseAndOkGood(t, A, AFact, MyInt, Am, e)
+	testutils.EvalAndOkGood(t, prog, 3)
+
+}
+
+func Test025b(t *testing.T) {
+	A := "type A(type ) struct {}"
+	AFact :="func (a A(type )) NewMyString(type )(x MyString()) MyString() {return x}"
+	MyString := "type MyString(type ) string"
+	Am := "func (x MyString(type )) incr(type )() MyString() {return x + \"a\"}"
+	e := "A(){}.NewMyString()(\"ol\").incr()()"
+	//fggParseAndOkGood(t, A, AFact, MyString, Am, e)
+	prog := fggParseAndOkGood(t, A, AFact, MyString, Am, e)
+	testutils.EvalAndOkGood(t, prog, 3)
 }
