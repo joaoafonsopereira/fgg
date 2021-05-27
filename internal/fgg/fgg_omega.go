@@ -27,7 +27,7 @@ type GroundGamma map[Name]GroundType
 // Pre: IsMonomOK
 func GetOmega(ds []Decl, e_main FGGExpr) Omega {
 	omega := Omega{make(map[string]GroundType), make(map[string]MethInstan)}
-	collectExpr(ds, make(GroundGamma), e_main, omega)
+	collectExpr(ds, make(GroundGamma), omega, e_main)
 	fixomega(ds, omega)
 	//omega.Println()
 	return omega
@@ -78,12 +78,10 @@ type MethInstan struct {
 	psi    SmallPsi // Pre: all isGround
 }
 
-// Pre: isGround(u_ground)
 func toKey_Wt(u_ground GroundType) string {
 	return u_ground.String()
 }
 
-// Pre: isGround(x.u_ground)
 func toKey_Wm(x MethInstan) string {
 	return x.u_recv.String() + "_" + x.meth + "_" + x.psi.String()
 }
@@ -103,27 +101,23 @@ func fixomega(ds []Decl, omega Omega) {
 /* Expressions */
 
 // gamma used to type Call receiver
-func collectExpr(ds []Decl, gamma GroundGamma, e FGGExpr, omega Omega) bool {
+func collectExpr(ds []Decl, gamma GroundGamma, omega Omega, e FGGExpr) bool {
 	res := false
 	switch e1 := e.(type) {
 	case Variable:
 		return res
 	case StructLit:
-		for _, elem := range e1.elems {
-			res = collectExpr(ds, gamma, elem, omega) || res
-		}
+		res = collectExprs(ds, gamma, omega, e1.elems...)
 		k := toKey_Wt(e1.u_S)
 		if _, ok := omega.us[k]; !ok {
 			omega.us[k] = e1.u_S
 			res = true
 		}
 	case Select:
-		return collectExpr(ds, gamma, e1.e_S, omega)
+		return collectExpr(ds, gamma, omega, e1.e_S)
 	case Call:
-		res = collectExpr(ds, gamma, e1.e_recv, omega) || res
-		for _, e_arg := range e1.args {
-			res = collectExpr(ds, gamma, e_arg, omega) || res
-		}
+		res = collectExpr(ds, gamma, omega, e1.e_recv)
+		res = collectExprs(ds, gamma, omega, e1.args...) || res
 		gamma1 := make(Gamma)
 		for k, v := range gamma {
 			gamma1[k] = v
@@ -143,7 +137,7 @@ func collectExpr(ds []Decl, gamma GroundGamma, e FGGExpr, omega Omega) bool {
 			res = true
 		}
 	case Assert:
-		res = collectExpr(ds, gamma, e1.e_I, omega) || res
+		res = collectExpr(ds, gamma, omega, e1.e_I)
 		ground := e1.u_cast.(GroundType)
 		k := toKey_Wt(ground)
 		if _, ok := omega.us[k]; !ok {
@@ -151,27 +145,29 @@ func collectExpr(ds []Decl, gamma GroundGamma, e FGGExpr, omega Omega) bool {
 			res = true
 		}
 	case Sprintf:
-		for _, arg := range e1.args {
-			res = collectExpr(ds, gamma, arg, omega) || res
-		}
+		res = collectExprs(ds, gamma, omega, e1.args...)
 
 	case BinaryOperation: // TODO is it possible to factor out the repeated code?? <<<<<<<-----------
-		res = collectExpr(ds, gamma, e1.left, omega) || res
-		res = collectExpr(ds, gamma, e1.right, omega) || res
+		res = collectExprs(ds, gamma, omega, e1.left, e1.right)
 	case Comparison:
-		res = collectExpr(ds, gamma, e1.left, omega) || res
-		res = collectExpr(ds, gamma, e1.right, omega) || res
+		res = collectExprs(ds, gamma, omega, e1.left, e1.right)
 
 	case PrimtValue:
 		// Do nothing -- these nodes are leafs of the Ast, hence there is no
 		// new type instantiations to be found underneath them.
 		// Besides, there's no reason to collect primitive type 'instances', as
 		// there is only 1 possible 'instance' and it has no methods.
-	//case PrimitiveLiteral, BoolVal, Int32Val, Int64Val, Float32Val, Float64Val, StringVal: // TODO maybe create an interface to represent all primitives <<<<<<<-----------
 
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e).String() + "\n\t" +
 			e.String())
+	}
+	return res
+}
+func collectExprs(ds []Decl, gamma GroundGamma, omega Omega, es ...FGGExpr) bool {
+	res := false
+	for _, arg := range es {
+		res = collectExpr(ds, gamma, omega, arg) || res
 	}
 	return res
 }
