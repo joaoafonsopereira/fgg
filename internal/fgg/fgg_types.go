@@ -565,7 +565,7 @@ func (i ITypeLit) Ok(ds []Decl, delta Delta) {
 				panic("Repeat embedding of type: " + k + "\n\t" + i.String())
 			}
 			seen_u[k] = s
-			if !IsNamedIfaceType(ds, s) { // CHECKME: allow embed type param?
+			if !IsIfaceType(ds, s) { // CHECKME: allow embed type param?
 				panic("Embedded type must be a named interface, not: " + k + "\n\t" + i.String())
 			}
 			s.Ok(ds, delta)

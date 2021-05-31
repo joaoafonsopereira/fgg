@@ -15,11 +15,11 @@ var _ = strconv.AppendBool
 
 /* Export */
 
-func IsStructType(ds []Decl, u Type) bool        { return isStructType(ds, u) }
-func IsNamedIfaceType(ds []Decl, u Type) bool    { return isNamedIfaceType(ds, u) }
-func NewTFormal(name TParam, u_I Type) TFormal   { return TFormal{name, u_I} }
-func NewBigPsi(tFormals []TFormal) BigPsi        { return BigPsi{tFormals} }
-
+func IsStructType(ds []Decl, u Type) bool      { return isStructType(ds, u) }
+func IsIfaceType(ds []Decl, u Type) bool       { return isIfaceType(ds, u) }
+func IsIfaceLikeType(ds []Decl, u Type) bool   { return isIfaceLikeType(ds, u) }
+func NewTFormal(name TParam, u_I Type) TFormal { return TFormal{name, u_I} }
+func NewBigPsi(tFormals []TFormal) BigPsi      { return BigPsi{tFormals} }
 
 /* Aliases from base */
 
@@ -247,29 +247,15 @@ type FGGExpr interface {
 
 /* Helpers */
 
-// Check if u is a \tau_S -- implicitly must be a TNamed
+// Check if u is a \tau_S
 func isStructType(ds []Decl, u Type) bool {
 	_, ok := u.Underlying(ds).(STypeLit)
 	return ok
-	//return isStructTypeBase(ds, u) // TODO substituir usos de isStructType por isValidReceiver (na maior parte dos casos é a última que se quer) -- tentar até arranjar um nome melhor
-}
-
-// TODO unify this function and the next into one
-func isNamedIfaceTypeBase(ds []Decl, u Type) bool {
-	_, ok := u.Underlying(ds).(ITypeLit)
-	return ok
-}
-
-// Check if u is a \tau_I -- N.B. looks for a *TNamed*, i.e., not a TParam
-func isNamedIfaceType(ds []Decl, u Type) bool {
-	if u1, ok := u.(TNamed); ok {
-		return isNamedIfaceTypeBase(ds, u1)
-	}
-	return false
 }
 
 func isIfaceType(ds []Decl, u Type) bool {
-	return isNamedIfaceTypeBase(ds, u)
+	_, ok := u.Underlying(ds).(ITypeLit)
+	return ok
 }
 
 // checks if u is a u_J

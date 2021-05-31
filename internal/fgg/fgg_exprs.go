@@ -500,7 +500,7 @@ func (a Assert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (T
 	a.u_cast.Ok(ds, delta)
 	u, e_I := a.e_I.Typing(ds, delta, gamma, allowStupid)
 	newAst := Assert{e_I, a.u_cast}
-	if !isIfaceLikeType(ds, u) {
+	if !IsIfaceLikeType(ds, u) {
 		if allowStupid {
 			return a.u_cast, newAst
 		} else {
@@ -509,7 +509,7 @@ func (a Assert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (T
 		}
 	}
 	// u is a TParam or an interface type TName
-	if isIfaceLikeType(ds, a.u_cast) {
+	if IsIfaceLikeType(ds, a.u_cast) {
 		return a.u_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
 	}
 	// a.u_cast might be a named (non-interface) or a primitive type

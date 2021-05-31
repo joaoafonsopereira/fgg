@@ -163,21 +163,21 @@ func (md MethDecl) Ok(ds []Decl) {
 		panic("Invalid receiver type: " + md.t_recv +
 			"\n\t" + md.String())
 	}
-	// Phi <: Phi'
+	// Phi_md <: Phi_td
+	tfs_md := md.Psi_recv.tFormals
 	tfs_td := recv_decl.GetBigPsi().tFormals
-	if len(tfs_td) != len(md.Psi_recv.tFormals) {
+	if len(tfs_td) != len(tfs_md) {
 		panic("Receiver type parameter arity mismatch:\n\tmdecl=" + md.t_recv +
 			md.Psi_recv.String() + ", tdecl=" + recv_decl.GetName() +
 			"\n\t" + recv_decl.GetBigPsi().String())
 	}
+	subs_md := makeParamIndexSubs(md.Psi_recv)
+	subs_td := makeParamIndexSubs(recv_decl.GetBigPsi())
 	for i := 0; i < len(tfs_td); i++ {
-		subs_md := makeParamIndexSubs(md.Psi_recv)
-		subs_td := makeParamIndexSubs(recv_decl.GetBigPsi())
-		if !md.Psi_recv.tFormals[i].u_I.TSubs(subs_md). // Canonicalised
-								Impls(ds, tfs_td[i].u_I.TSubs(subs_td)) {
+		if !tfs_md[i].u_I.TSubs(subs_md).Impls(ds, tfs_td[i].u_I.TSubs(subs_td)) { // Canonicalised
 			panic("Receiver parameter upperbound not a subtype of type decl upperbound:" +
-				"\n\tmdecl=" + md.Psi_recv.tFormals[i].String() + ", tdecl=" +
-				tfs_td[i].String())
+				"\n\tmdecl=" + tfs_md[i].String() +
+				", tdecl=" + tfs_td[i].String())
 		}
 	}
 	// Phi, Psi ok
@@ -286,7 +286,6 @@ func (g Sig) TSubs(subs map[TParam]Type) Sig {
 	return Sig{g.meth, BigPsi{tfs}, ps, u}
 }
 
-//func (g Sig) Ok(ds []Decl, env BigPsi) {
 func (g Sig) Ok(ds []Decl, env Delta) {
 	g.Psi.Ok(ds, env)
 	for _, v := range g.Psi.tFormals {
@@ -328,7 +327,7 @@ type TypeDecl struct {
 
 var _ Decl = TypeDecl{}
 
-func (t TypeDecl) GetName() base.Name  { return t.name }
+func (t TypeDecl) GetName() Name       { return t.name }
 func (t TypeDecl) GetBigPsi() BigPsi   { return t.Psi }
 func (t TypeDecl) GetSourceType() Type { return t.srcType }
 

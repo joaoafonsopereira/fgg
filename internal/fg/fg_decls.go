@@ -52,7 +52,7 @@ func (p FGProgram) IsPrintf() bool     { return p.printf } // HACK
 
 // From base.Program
 func (p FGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
-	tds := make(map[string]TypeDecl)    // Type name
+	tds := make(map[string]TypeDecl) // Type name
 	mds := make(map[string]MethDecl) // Hack, string = string(md.recv.t) + "." + md.name
 	for _, v := range p.decls {
 		switch d := v.(type) {
@@ -253,13 +253,13 @@ func (g Sig) String() string {
 }
 
 type TypeDecl struct {
-	name Name
+	name    Name
 	srcType Type
 }
 
 var _ Decl = TypeDecl{}
 
-func (t TypeDecl) GetName() base.Name  { return t.name }
+func (t TypeDecl) GetName() Name       { return t.name }
 func (t TypeDecl) GetSourceType() Type { return t.srcType }
 
 func (t TypeDecl) Ok(ds []base.Decl) {
