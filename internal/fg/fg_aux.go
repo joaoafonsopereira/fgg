@@ -64,19 +64,14 @@ func methods(ds []Decl, t Type) MethodSet {
 	}
 }
 
-// Pre: t_S is a struct type
-func body(ds []Decl, t_S Type, m Name) (Name, []Name, FGExpr) {
-	for _, v := range ds {
-		md, ok := v.(MethDecl)
-		if ok && md.recv.t == t_S && md.name == m {
-			xs := make([]Name, len(md.pDecls))
-			for i := 0; i < len(md.pDecls); i++ {
-				xs[i] = md.pDecls[i].name
-			}
-			return md.recv.name, xs, md.e_body
-		}
+// Pre: t_S is a concrete type
+func body(ds []Decl, t_S TNamed, m Name) (Name, []Name, FGExpr) {
+	md := getMethDecl(ds, t_S, m) // panics if not found
+	xs := make([]Name, len(md.pDecls))
+	for i := 0; i < len(md.pDecls); i++ {
+		xs[i] = md.pDecls[i].name
 	}
-	panic("Method not found: " + t_S.String() + "." + m)
+	return md.recv.name, xs, md.e_body
 }
 
 // Represents the aux function type() defined in fig.16 of the paper.
@@ -103,4 +98,14 @@ func getTDecl(ds []Decl, t Name) TypeDecl {
 		}
 	}
 	panic("Type not found: " + t)
+}
+
+func getMethDecl(ds []Decl, recv Type, m Name) MethDecl {
+	for _, d := range ds {
+		md, ok := d.(MethDecl)
+		if ok && md.recv.t == recv && md.name == m {
+			return md
+		}
+	}
+	panic("Method not found: " + recv.String() + "." + m)
 }

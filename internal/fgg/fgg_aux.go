@@ -114,31 +114,23 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 	}
 }
 
-// Pre: t_S is a struct type
+// Pre: t_S is a concrete type
 // Submission version, m(~\rho) informal notation
 //func body(ds []Decl, u_S TNamed, m Name, targs []Type) (Name, []Name, FGGExpr) {
 func body(ds []Decl, u_S TNamed, m Name, targs []Type) (ParamDecl, []ParamDecl, FGGExpr) {
-	for _, v := range ds {
-		md, ok := v.(MethDecl)
-		if ok && md.t_recv == u_S.t_name && md.name == m {
-			subs := make(map[TParam]Type) // Cf. MakeEta
-			for i := 0; i < len(md.Psi_recv.tFormals); i++ {
-				subs[md.Psi_recv.tFormals[i].name] = u_S.u_args[i]
-			}
-			for i := 0; i < len(md.Psi_meth.tFormals); i++ {
-				subs[md.Psi_meth.tFormals[i].name] = targs[i]
-			}
-			recv := ParamDecl{md.x_recv, u_S}
-			pds := make([]ParamDecl, len(md.pDecls))
-			for i := 0; i < len(md.pDecls); i++ {
-				tmp := md.pDecls[i]
-				pds[i] = ParamDecl{tmp.name, tmp.u.TSubs(subs)}
-			}
-			//return md.x_recv, xs, md.e_body.TSubs(subs)
-			return recv, pds, md.e_body.TSubs(subs)
-		}
+	md := getMethDecl(ds, u_S.t_name, m) // panics if not found
+	subs := MakeTSubs(md.Psi_recv, u_S.u_args) // cf MakeEta
+	for i := 0; i < len(md.Psi_meth.tFormals); i++ { //TODO TSubs.add() ..., TSubs vs SubsEtaOpen
+		subs[md.Psi_meth.tFormals[i].name] = targs[i]
 	}
-	panic("Method not found: " + u_S.String() + "." + m)
+	recv := ParamDecl{md.x_recv, u_S}
+	pds := make([]ParamDecl, len(md.pDecls))
+	for i := 0; i < len(md.pDecls); i++ {
+		tmp := md.pDecls[i]
+		pds[i] = ParamDecl{tmp.name, tmp.u.TSubs(subs)}
+	}
+	//return md.x_recv, xs, md.e_body.TSubs(subs)
+	return recv, pds, md.e_body.TSubs(subs)
 }
 
 // Represents the aux function type() defined in fig.16 of the paper.
@@ -165,6 +157,16 @@ func getTDecl(ds []Decl, t Name) TypeDecl {
 		}
 	}
 	panic("Type not found: " + t)
+}
+
+func getMethDecl(ds []Decl, recv Name, m Name) MethDecl {
+	for _, d := range ds {
+		md, ok := d.(MethDecl)
+		if ok && md.t_recv == recv && md.name == m {
+			return md
+		}
+	}
+	panic("Method not found: " + recv + "." + m)
 }
 
 // !!! Sig in FGG includes ~a and ~x, which naively breaks "impls"

@@ -370,14 +370,9 @@ func (c Call) CanEval(ds []Decl) bool {
 			return false
 		}
 	}
-	t_S := c.e_recv.(StructLit).t_S
-	for _, d := range ds { // TODO: factor out GetMethDecl
-		if md, ok := d.(MethDecl); ok &&
-			md.recv.t == t_S && md.name == c.meth { // i.e., Impls, Cf. typing, aux methods
-			return len(md.pDecls) == len(c.args) // Needed?
-		}
-	}
-	return false
+	t_S := dynamicType(c.e_recv).(TNamed)
+	md := getMethDecl(ds, t_S, c.meth)
+	return len(md.pDecls) == len(c.args) // Needed?
 }
 
 func (c Call) String() string {

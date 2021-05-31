@@ -531,7 +531,7 @@ func isNomonoCycleAux(ds []Decl, graph cgraph, c cycle, tArgs cTypeArgs, i int) 
 		return false
 	}
 	next := c[i]
-	md := getMDecl(ds, next.t_recv, next.m)
+	md := getMethDecl(ds, next.t_recv, next.m)
 	subs := make(Delta)
 	for i, v := range tArgs.psi_recv {
 		subs[md.Psi_recv.tFormals[i].name] = v
@@ -548,15 +548,6 @@ func isNomonoCycleAux(ds []Decl, graph cgraph, c cycle, tArgs cTypeArgs, i int) 
 		isNomonoCycleAux(ds, graph, c, tArgs1, i+1)
 	}
 	return false
-}
-
-func getMDecl(ds []Decl, t_recv Name, meth Name) MethDecl {
-	for _, v := range ds {
-		if md, ok := v.(MethDecl); ok && md.t_recv == t_recv && md.name == meth {
-			return md
-		}
-	}
-	panic("MethDecl not found: " + t_recv + "." + meth)
 }
 
 func containsNestedTParam(u Type) bool {
