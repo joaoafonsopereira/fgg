@@ -32,7 +32,7 @@ func IsMonomOK(p FGGProgram) (bool, string) {
 			for _, v := range md.pDecls { // TODO: factor out
 				gamma[v.name] = v.u
 			}
-			collectExprOpen(ds, delta, gamma, md.e_body, omega)
+			collectExprOpen(ds, delta, gamma, omega, md.e_body)
 			if ok, msg := nomonoOmega(ds, delta, md, omega); ok {
 				return false, msg
 			}
@@ -136,27 +136,23 @@ func tokeyWmOpen(x MethInstanOpen) string {
 	return x.u_recv.String() + "_" + x.meth + "_" + x.psi.String()
 }
 
-func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, e FGGExpr, omega Nomega) bool {
+func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, omega Nomega, e FGGExpr) bool {
 	res := false
 	switch e1 := e.(type) {
 	case Variable:
 		return res
 	case StructLit:
-		for _, elem := range e1.elems {
-			res = collectExprOpen(ds, delta, gamma, elem, omega) || res
-		}
+		res = collectExprsOpen(ds, delta, gamma, omega, e1.elems...)
 		k := tokeyWtOpen(e1.u_S)
 		if _, ok := omega.us[k]; !ok {
 			omega.us[k] = e1.u_S
 			res = true
 		}
 	case Select:
-		return collectExprOpen(ds, delta, gamma, e1.e_S, omega)
+		return collectExprOpen(ds, delta, gamma, omega, e1.e_S)
 	case Call:
-		res = collectExprOpen(ds, delta, gamma, e1.e_recv, omega) || res
-		for _, e_arg := range e1.args {
-			res = collectExprOpen(ds, delta, gamma, e_arg, omega) || res
-		}
+		res = collectExprOpen(ds, delta, gamma, omega, e1.e_recv)
+		res = collectExprsOpen(ds, delta, gamma, omega, e1.args...) || res
 		gamma1 := make(Gamma)
 		for k, v := range gamma {
 			gamma1[k] = v
@@ -174,7 +170,7 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, e FGGExpr, omega Nomeg
 			res = true
 		}
 	case Assert:
-		res = collectExprOpen(ds, delta, gamma, e1.e_I, omega) || res
+		res = collectExprOpen(ds, delta, gamma, omega, e1.e_I)
 		u := e1.u_cast
 		k := tokeyWtOpen(u)
 		if _, ok := omega.us[k]; !ok {
@@ -182,22 +178,13 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, e FGGExpr, omega Nomeg
 			res = true
 		}
 	case Sprintf:
-		//k := tokeyWtOpen(STRING_TYPE)
-		//if _, ok := omega.us[k]; !ok {
-		//	omega.us[k] = STRING_TYPE
-		//	res = true
-		//}
-		for _, arg := range e1.args {
-			res = collectExprOpen(ds, delta, gamma, arg, omega) || res
-		}
+		res = collectExprsOpen(ds, delta, gamma, omega, e1.args...)
 
 	case BinaryOperation: // TODO is it possible to factor out the repeated code?? <<<<<<<-----------
-		res = collectExprOpen(ds, delta, gamma, e1.left, omega) || res
-		res = collectExprOpen(ds, delta, gamma, e1.right, omega) || res
+		res = collectExprsOpen(ds, delta, gamma, omega, e1.left, e1.right)
 	case Comparison:
-		res = collectExprOpen(ds, delta, gamma, e1.left, omega) || res
-		res = collectExprOpen(ds, delta, gamma, e1.right, omega) || res
-	case PrimitiveLiteral, BoolVal, Int32Val, Int64Val, Float32Val, Float64Val, StringVal: // TODO maybe create an interface to represent all primitives <<<<<<<-----------
+		res = collectExprsOpen(ds, delta, gamma, omega, e1.left, e1.right)
+	case PrimtValue:
 		// Do nothing -- these nodes are leafs of the Ast, hence there is no
 		// new type instantiations to be found underneath them.
 		// Besides, there's no reason to collect primitive type 'instances', as
@@ -205,6 +192,14 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, e FGGExpr, omega Nomeg
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e).String() + "\n\t" +
 			e.String())
+	}
+	return res
+}
+
+func collectExprsOpen(ds []Decl, delta Delta, gamma Gamma, omega Nomega, es ...FGGExpr) bool {
+	res := false
+	for _, arg := range es {
+		res = collectExprOpen(ds, delta, gamma, omega, arg) || res
 	}
 	return res
 }
@@ -229,12 +224,10 @@ func auxFOpen(ds []Decl, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]Type)
 	for _, u := range omega.us {
-		if !isStructType(ds, u) { //|| u.Equals(STRING_TYPE) { // CHECKME
-			continue
-		}
-		for _, u_f := range Fields(ds, u.(TNamed)) {
-			cast := u_f.u
-			tmp[tokeyWtOpen(cast)] = cast
+		if u_S, ok := u.Underlying(ds).(STypeLit); ok {
+			for _, fd := range u_S.GetFieldDecls() {
+				tmp[tokeyWtOpen(fd.u)] = fd.u
+			}
 		}
 	}
 	for k, v := range tmp {
@@ -250,15 +243,18 @@ func auxI2(ds []Decl, delta Delta, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]MethInstanOpen)
 	for _, m := range omega.ms {
-		if !IsNamedIfaceType(ds, m.u_recv) {
+		if !isIfaceType(ds, m.u_recv) { // want both named and anonymous ifaces
 			continue
 		}
-		for _, m1 := range omega.ms {
-			if !IsNamedIfaceType(ds, m1.u_recv) {
+		// more precise to iterate us: might have iface types that were only
+		// added as type instances, without "mapping" to a method inst
+		// (e.g. only appearing in a struct field)
+		for _, u := range omega.us {
+			if !isIfaceType(ds, u) || u.Equals(m.u_recv) {
 				continue
 			}
-			if m1.u_recv.ImplsDelta(ds, delta, m.u_recv) {
-				mm := MethInstanOpen{m1.u_recv, m.meth, m.psi}
+			if u.ImplsDelta(ds, delta, m.u_recv) {
+				mm := MethInstanOpen{u, m.meth, m.psi}
 				tmp[tokeyWmOpen(mm)] = mm
 			}
 		}
@@ -276,19 +272,14 @@ func auxMOpen(ds []Decl, delta Delta, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]Type)
 	for _, m := range omega.ms {
-		gs := methodsDelta(ds, delta, m.u_recv)
-		for _, g := range gs { // Should be only g s.t. g.meth == m.meth
-			if g.meth != m.meth {
-				continue
-			}
-			eta := MakeEtaOpen(g.Psi, m.psi)
-			for _, pd := range g.pDecls {
-				u_pd := pd.u.SubsEtaOpen(eta) // HERE: need receiver subs also? cf. map.fgg "type b Eq(b)" -- methods should be ok?
-				tmp[tokeyWtOpen(u_pd)] = u_pd
-			}
-			u_ret := g.u_ret.SubsEtaOpen(eta)
-			tmp[tokeyWtOpen(u_ret)] = u_ret
+		sig := methodsDelta(ds, delta, m.u_recv)[m.meth]
+		eta := MakeEtaOpen(sig.Psi, m.psi)
+		for _, pd := range sig.pDecls {
+			u_pd := pd.u.SubsEtaOpen(eta)
+			tmp[tokeyWtOpen(u_pd)] = u_pd
 		}
+		u_ret := sig.u_ret.SubsEtaOpen(eta)
+		tmp[tokeyWtOpen(u_ret)] = u_ret
 	}
 	for k, v := range tmp {
 		if _, ok := omega.us[k]; !ok {
@@ -312,7 +303,7 @@ func auxSOpen(ds []Decl, delta Delta, omega Nomega) bool {
 			u_S := u.(TNamed)
 			x0, xs, e := body(ds, u_S, m.meth, m.psi)
 			gamma := make(Gamma)
-			gamma[x0.name] = x0.u.(TNamed)
+			gamma[x0.name] = x0.u
 			for _, pd := range xs {
 				gamma[pd.name] = pd.u
 			}
@@ -320,7 +311,7 @@ func auxSOpen(ds []Decl, delta Delta, omega Nomega) bool {
 			k := tokeyWmOpen(m1)
 			//if _, ok := omega.ms[k]; !ok { // No: initial collectExpr already adds to omega.ms
 			tmp[k] = m1
-			res = collectExprOpen(ds, delta, gamma, e, omega) || res
+			res = collectExprOpen(ds, delta, gamma, omega, e) || res
 			//}
 		}
 	}
@@ -338,25 +329,21 @@ func auxE1Open(ds []Decl, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]TNamed)
 	for _, u := range omega.us {
-		if !isNamedIfaceType(ds, u) { // CHECKME: type param
-			continue
-		}
-
-		//u_I := u.Underlying(ds).(ITypeLit) // TOdO underlying já inclui essa subs
-		//for _, s := range u_I.GetSpecs() {
-		//	if u_emb, ok := s.(TNamed); ok {
-		//		tmp[tokeyWtOpen(u_emb)] = u_emb
-		//	}
-		//}
-		u_I := u.(TNamed)
-		td_I := getTDecl(ds, u_I.t_name)
-		eta := MakeEtaOpen(td_I.Psi, u_I.u_args)
-		for _, s := range u_I.Underlying(ds).(ITypeLit).specs { // todo check underlying <<<-----------
-			if u_emb, ok := s.(TNamed); ok {
-				u_sub := u_emb.SubsEtaOpen(eta).(TNamed)
-				tmp[tokeyWtOpen(u_sub)] = u_sub
+		// underlying already includes substitution
+		// e.g. for the declaration:
+		// type Pair[X any, Y any] struct { x X; y Y }
+		// we have that
+		// -> (Pair[int, int]).Underlying(ds) == struct { x int, y int }
+		// and
+		// -> (Pair[int, T]).Underlying(ds) == struct { x int, y T } ???????
+		if u_I, ok := u.Underlying(ds).(ITypeLit); ok {
+			for _, s := range u_I.specs {
+				if u_emb, ok := s.(TNamed); ok {
+					tmp[tokeyWtOpen(u_emb)] = u_emb
+				}
 			}
-		}
+		} //else if todo CHECKME: type param -------------------------------------------
+
 	}
 	for k, v := range tmp {
 		if _, ok := omega.us[k]; !ok {
@@ -372,22 +359,16 @@ func auxE2Open(ds []Decl, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]MethInstanOpen)
 	for _, m := range omega.ms {
-		if !isNamedIfaceType(ds, m.u_recv) { // CHECKME: type param
+		// underlying already applies substitution "implied" by m.u_recv
+		u_I, ok := m.u_recv.Underlying(ds).(ITypeLit)
+		if !ok {
 			continue
 		}
-		u_I := m.u_recv.(TNamed) // TODO check these substitutionssssssssss
-		td_I := getTDecl(ds, u_I.t_name)
-		eta := MakeEtaOpen(td_I.Psi, u_I.u_args)
-		//for _, s := range td_I.specs {
-		for _, s := range u_I.Underlying(ds).(ITypeLit).specs {
+		for _, s := range u_I.GetSpecs() {
 			if u_emb, ok := s.(TNamed); ok {
-				u_sub := u_emb.SubsEtaOpen(eta).(TNamed)
-				gs := methods(ds, u_sub)
-				for _, g := range gs {
-					if m.meth == g.meth {
-						m_emb := MethInstanOpen{u_sub, m.meth, m.psi}
-						tmp[tokeyWmOpen(m_emb)] = m_emb
-					}
+				if _, hasMeth := methods(ds, u_emb)[m.meth]; hasMeth {
+					m_emb := MethInstanOpen{u_emb, m.meth, m.psi}
+					tmp[tokeyWmOpen(m_emb)] = m_emb
 				}
 			}
 		}

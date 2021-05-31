@@ -15,30 +15,6 @@ func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
 func NewSTypeLit(fds []FieldDecl) STypeLit       { return STypeLit{fds} }
 func NewITypeLit(specs []Spec) ITypeLit          { return ITypeLit{specs} }
 
-/* Ground types -- todo move */
-
-var _ GroundType = TNamed{}
-var _ GroundType = TPrimitive{}
-var _ GroundType = STypeLit{}
-var _ GroundType = ITypeLit{}
-
-func (t TNamed) isGround() bool {
-	for _, u := range t.u_args {
-		if possibleGround, ok := u.(GroundType); ok {
-			if !possibleGround.isGround() {
-				return false
-			}
-		} else {
-			return false
-		}
-	}
-	return true
-}
-
-func (t TPrimitive) isGround() bool { return true }
-func (t STypeLit) isGround() bool   { return true }
-func (t ITypeLit) isGround() bool   { return true }
-
 /* Type parameters */
 
 type TParam Name
@@ -347,8 +323,8 @@ func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	case TNamed:
 		if t0.Undefined() { // e.g. 1 'implements' MyInt
 			return t0.ImplsDelta(ds, delta, u.Underlying(ds))
-		} else {
-			return isNamedIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
+		} else { // but e.g. int doesn't implement MyInt
+			return isIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
 		}
 	case ITypeLit:
 		return len(methods(ds, u_cast)) == 0 // or if t0 belongs to type list

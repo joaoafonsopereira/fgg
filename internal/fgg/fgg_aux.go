@@ -84,9 +84,7 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 		// The method set of any other TNamed T consists of all methods
 		// declared with receiver type T
 		if u_I, ok := u_cast.Underlying(ds).(ITypeLit); ok {
-			td := getTDecl(ds, u_cast.t_name)
-			subs := MakeTSubs(td.Psi, u_cast.u_args) // TODO problem: now this TSubs is already being done in Underlying. Where should it be??
-			return methodsDelta(ds, delta, u_I.TSubs(subs))
+			return methodsDelta(ds, delta, u_I)
 		} else {
 			res := make(MethodSet)
 			for _, v := range ds {
