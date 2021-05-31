@@ -22,7 +22,6 @@ func NewStructLit(u_S TNamed, es []FGGExpr) StructLit         { return StructLit
 func NewSelect(e FGGExpr, f Name) Select                      { return Select{e, f} }
 func NewCall(e FGGExpr, m Name, us []Type, es []FGGExpr) Call { return Call{e, m, us, es} }
 func NewAssert(e FGGExpr, t Type) Assert                      { return Assert{e, t} }
-func NewString(v string) StringLit                            { return StringLit{v} }
 func NewSprintf(format string, args []FGGExpr) Sprintf        { return Sprintf{format, args} }
 
 /* Variable */
@@ -149,12 +148,10 @@ func (s StructLit) Typing(ds []Decl, delta Delta, gamma Gamma,
 		}
 
 		elems[i] = newSubtree
-		// if newSubtree is a NumericLiteral node, convert it to the Ast node
-		// corresponding to a value of the expected type (u)
-		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
-			if u_P, ok := u.(TPrimitive); ok {
-				elems[i] = ValueFromLiteral(newSubtree, u_P)
-			}
+		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
+		// corresponding to a value of the expected type (r)
+		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
+			elems[i] = ConvertLitNode(lit, r)
 		}
 	}
 	return s.u_S, StructLit{s.u_S, elems}
@@ -346,8 +343,9 @@ func (c Call) Eval(ds []Decl) (FGGExpr, string) {
 		return Call{c.e_recv, c.meth, c.t_args, args}, rule
 	}
 	// c.e and c.args all values
-	s := c.e_recv.(StructLit)
-	x0, xs, e := body(ds, s.u_S, c.meth, c.t_args) // panics if method not found
+	t := dynamicType(c.e_recv).(TNamed)
+	x0, xs, e := body(ds, t, c.meth, c.t_args) // panics if method not found
+
 	subs := make(map[Variable]FGGExpr)
 	subs[Variable{x0.name}] = c.e_recv
 	for i := 0; i < len(xs); i++ {
@@ -406,26 +404,14 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 				", param=" + u_p.String() + "\n\t" + c.String())
 		}
 		args[i] = newSubtree
-		// if newSubtree is a NumericLiteral node, convert it to the Ast node
-		// corresponding to a value of the expected type (u)
-		if newSubtree, ok := newSubtree.(NumericLiteral); ok {
-			if u_P, ok := u_p.(TPrimitive); ok { // TODO name clash: u_rho & u_Primitive (both currently u_p)
-				args[i] = ValueFromLiteral(newSubtree, u_P)
-			}
+		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
+		// corresponding to a value of the expected type (u_p)
+		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
+			args[i] = ConvertLitNode(lit, u_p)
 		}
 	}
 	return g.u_ret.TSubs(subs), Call{e_recv, c.meth, c.t_args, args} // subs necessary, c.psi info (i.e., bounds) will be "lost" after leaving this context
 }
-
-// TODO think of a name; refactor StructLit, Call to use this function
-//func replaceLiterals(node FGGExpr, u_p Type) FGGExpr {
-//	if newSubtree, ok := node.(NumericLiteral); ok {
-//		if u_P, ok := u_p.(TPrimitive); ok {
-//			return ValueFromLiteral(newSubtree, u_P)
-//		}
-//	}
-//	return node
-//}
 
 // From base.Expr
 func (c Call) IsValue() bool {
@@ -486,7 +472,7 @@ func (c Call) ToGoString(ds []Decl) string {
 
 /* Assert */
 
-type Assert struct { // TODO check Typing/Eval of Assert, as it seems to assume every TNamed is a struct or interface
+type Assert struct {
 	e_I    FGGExpr
 	u_cast Type
 }
@@ -509,34 +495,31 @@ func (a Assert) Eval(ds []Decl) (FGGExpr, string) {
 		e, rule := a.e_I.Eval(ds)
 		return Assert{e, a.u_cast}, rule
 	}
-	u_S := a.e_I.(StructLit).u_S
-	if !IsStructType(ds, u_S) {
-		panic("Non struct type found in struct lit: " + u_S.String())
-	}
-	if u_S.ImplsDelta(ds, make(map[TParam]Type), a.u_cast) { // Empty Delta -- not super clear in submission version
+	u_S := dynamicType(a.e_I)
+	if u_S.ImplsDelta(ds, make(Delta), a.u_cast) { // Empty Delta -- not super clear in submission version
 		return a.e_I, "Assert"
 	}
 	panic("Cannot reduce: " + a.String())
 }
 
 func (a Assert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
+	a.u_cast.Ok(ds, delta)
 	u, e_I := a.e_I.Typing(ds, delta, gamma, allowStupid)
 	newAst := Assert{e_I, a.u_cast}
-	a.u_cast.Ok(ds, delta)
-	if IsStructType(ds, u) {
+	if !isIfaceLikeType(ds, u) {
 		if allowStupid {
 			return a.u_cast, newAst
 		} else {
-			panic("Expr must be an interface type (in a non-stupid context): found " +
+			panic("Expr must be an interface-like type (in a non-stupid context): found " +
 				u.String() + " for\n\t" + a.String())
 		}
 	}
 	// u is a TParam or an interface type TName
-	if _, ok := a.u_cast.(TParam); ok || IsNamedIfaceType(ds, a.u_cast) {
+	if isIfaceLikeType(ds, a.u_cast) {
 		return a.u_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
 	}
-	// a.u is a struct type TName
-	if a.u_cast.ImplsDelta(ds, delta, u) {
+	// a.u_cast might be a named (non-interface) or a primitive type
+	if a.u_cast.ImplsDelta(ds, delta, bounds(delta, u)) {
 		return a.u_cast, newAst
 	}
 	panic("Struct type assertion must implement expr type: asserted=" +
@@ -555,7 +538,7 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return a.e_I.(StructLit).u_S.Impls(ds, a.u_cast) // TODO assumes only structs? <------------------
+	return dynamicType(a.e_I).Impls(ds, a.u_cast)
 }
 
 func (a Assert) String() string {
@@ -576,48 +559,7 @@ func (a Assert) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
-/* StringLit, fmt.Sprintf */
-
-type StringLit struct {
-	val string
-}
-
-var _ FGGExpr = StringLit{}
-
-func (s StringLit) GetValue() string { return s.val }
-
-func (s StringLit) Subs(subs map[Variable]FGGExpr) FGGExpr {
-	return s
-}
-
-func (s StringLit) TSubs(subs map[TParam]Type) FGGExpr {
-	return s
-}
-
-func (s StringLit) Eval(ds []Decl) (FGGExpr, string) {
-	panic("Cannot reduce: " + s.String())
-}
-
-func (s StringLit) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
-	return STRING_TYPE, s
-}
-
-// From base.Expr
-func (s StringLit) IsValue() bool {
-	return true
-}
-
-func (s StringLit) CanEval(ds []Decl) bool {
-	return false
-}
-
-func (s StringLit) String() string {
-	return "\"" + s.val + "\""
-}
-
-func (s StringLit) ToGoString(ds []Decl) string {
-	return "\"" + s.val + "\""
-}
+/* fmt.Sprintf */
 
 type Sprintf struct {
 	format string // Includes surrounding quotes
@@ -664,7 +606,7 @@ func (s Sprintf) Eval(ds []Decl) (FGGExpr, string) {
 		str := fmt.Sprintf(template, cast...)
 		str = strings.ReplaceAll(str, "\"", "") // HACK because StringLit.String() includes quotes
 		// FIXME: currently user remplates cannot include xplicit quote chars
-		return StringLit{str}, "Sprintf"
+		return NewStringLit(str), "Sprintf"
 	}
 }
 
@@ -674,7 +616,7 @@ func (s Sprintf) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (
 	for i := 0; i < len(s.args); i++ {
 		_, args[i] = s.args[i].Typing(ds, delta, gamma, allowStupid)
 	}
-	return STRING_TYPE, Sprintf{s.format, args}
+	return TPrimitive{tag: STRING}, Sprintf{s.format, args}
 }
 
 // From base.Expr

@@ -41,6 +41,8 @@ func bounds(delta Delta, u Type) Type {
 }
 
 // Pre: len(s.psi.as) == len (u_S.typs), where s is the STypeLit decl for u_S.t
+
+// TODO IS THIS FUNCTION NEEDED? THE TYPE SUBS is already being applied in u_S.Underlying()
 func fields(ds []Decl, u_S TNamed) []FieldDecl {
 	s, ok := u_S.Underlying(ds).(STypeLit)
 	if !ok {
@@ -82,9 +84,7 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 		// The method set of any other TNamed T consists of all methods
 		// declared with receiver type T
 		if u_I, ok := u_cast.Underlying(ds).(ITypeLit); ok {
-			td := getTDecl(ds, u_cast.t_name)
-			subs := MakeTSubs(td.Psi, u_cast.u_args)
-			return methodsDelta(ds, delta, u_I.TSubs(subs))
+			return methodsDelta(ds, delta, u_I)
 		} else {
 			res := make(MethodSet)
 			for _, v := range ds {
@@ -139,6 +139,20 @@ func body(ds []Decl, u_S TNamed, m Name, targs []Type) (ParamDecl, []ParamDecl, 
 		}
 	}
 	panic("Method not found: " + u_S.String() + "." + m)
+}
+
+// Represents the aux function type() defined in fig.16 of the paper.
+// Returns the exact run-time type of a value expression.
+func dynamicType(e FGGExpr) Type {
+	switch e1 := e.(type) {
+	case StructLit:
+		return e1.u_S
+	case NamedPrimitiveLiteral:
+		return e1.typ
+	case PrimtValue:
+		panic("dynamicType(PrimtValue) not defined") // todo <<<<--------------------
+	}
+	panic("dynamicType: expression is not a value: " + e.String())
 }
 
 /* Additional */

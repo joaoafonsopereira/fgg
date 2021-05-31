@@ -25,7 +25,7 @@ INT32     : 'int32' ;
 INT64     : 'int64' ;
 FLOAT32   : 'float32' ;
 FLOAT64   : 'float64' ;
-//STRING    : 'string' ;
+STRING    : 'string' ;
 
 // arithmetic ops
 PLUS      : '+' ;
@@ -49,7 +49,7 @@ NAME            : (LETTER | '_') (LETTER | '_' | DIGIT)* ;
 WHITESPACE      : [ \r\n\t]+ -> skip ;
 COMMENT         : '/*' .*? '*/' -> channel(HIDDEN) ;
 LINE_COMMENT    : '//' ~[\r\n]* -> channel(HIDDEN) ;
-STRING          : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' | ')' | '+' | '-')* '"' ;
+STRING_LIT      : '"' (LETTER | DIGIT | ' ' | '.' | ',' | '_' | '%' | '#' | '(' | ')' | '+' | '-')* '"' ;
 
 fragment DIGITS : DIGIT+ ;
 fragment EXPON  : [eE] [+-]? DIGITS ;
@@ -74,6 +74,7 @@ typs       : typ (',' typ)* ;
 primName   : BOOL
            | INT32   | INT64
            | FLOAT32 | FLOAT64
+           | STRING
            ;
 typeLit    : STRUCT '{' fieldDecls? '}'	            # StructTypeLit
 	       | INTERFACE '{' specs? '}'	            # InterfaceTypeLit
@@ -82,7 +83,7 @@ typeFormals: '(' TYPE typeFDecls? ')' ; // Refactored "(...)" into here
 typeFDecls : typeFDecl (',' typeFDecl)* ;
 typeFDecl  : NAME typ ;
 program    : PACKAGE MAIN ';'
-             (IMPORT STRING ';')?
+             (IMPORT STRING_LIT ';')?
              decls? FUNC MAIN '(' ')' '{'
                 ( '_' '=' expr | FMT '.' PRINTF '(' '"%#v"' ',' expr ')' )
              '}' EOF ;
@@ -102,7 +103,7 @@ expr       :
 	| expr '.' NAME														# Select
 	| recv = expr '.' NAME '(' targs = typs? ')' '(' args = exprs? ')'	# Call
 	| expr '.' '(' typ ')'												# Assert
-	| FMT '.' SPRINTF '(' (STRING | '"%#v"') (',' | expr)* ')'			# Sprintf
+	| FMT '.' SPRINTF '(' (STRING_LIT | '"%#v"') (',' | expr)* ')'		# Sprintf
 	| expr op=(PLUS | MINUS) expr                                       # BinaryOp
 	| expr op=(GT | LT) expr                                            # BinaryOp
 	| expr op=AND expr                                                  # BinaryOp
@@ -114,4 +115,5 @@ exprs      : expr (',' expr)*;
 primLit    : lit=(TRUE|FALSE)                       # BoolLit
            | lit=INT_LIT                            # IntLit
            | lit=FLOAT_LIT                          # FloatLit
-           ; // string, ...
+           | lit=STRING_LIT                         # StringLit
+           ;

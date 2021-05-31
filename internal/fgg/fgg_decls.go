@@ -23,14 +23,6 @@ func NewProgram(ds []Decl, e FGGExpr, printf bool) FGGProgram {
 	return FGGProgram{ds, e, printf}
 }
 
-//func NewSTypeLit(t Name, Psi BigPsi, fds []FieldDecl) STypeLit { return STypeLit{t, Psi, fds} }
-//func NewITypeLit(t_I Name, Psi BigPsi, specs []Spec) ITypeLit {
-//	return ITypeLit{t_I, Psi, specs}
-//}
-
-func NewSTypeLit(fds []FieldDecl) STypeLit { return STypeLit{fds} }
-func NewITypeLit(specs []Spec) ITypeLit    { return ITypeLit{specs} }
-
 func NewTypeDecl(name Name, Psi BigPsi, srcType Type) TypeDecl {
 	return TypeDecl{name, Psi, srcType}
 }
@@ -165,28 +157,22 @@ func (md MethDecl) GetReturn() Type            { return md.u_ret }
 func (md MethDecl) GetBody() FGGExpr           { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
-	if !isValidReceiver(ds, md.t_recv) {
+	// (type t_S(Phi') T ) ∈ D
+	recv_decl := getTDecl(ds, md.t_recv) // panics if not found
+	if isIfaceType(ds, recv_decl.GetSourceType()) {
 		panic("Invalid receiver type: " + md.t_recv +
 			"\n\t" + md.String())
 	}
-
-	md.Psi_recv.Ok(ds, make(Delta))
-	delta := md.Psi_recv.ToDelta()
-	md.Psi_meth.Ok(ds, delta)
-	for _, v := range md.Psi_meth.tFormals {
-		delta[v.name] = v.u_I
-	}
-
-	td := getTDecl(ds, md.t_recv) // panics if not found
-	tfs_td := td.GetBigPsi().tFormals
+	// Phi <: Phi'
+	tfs_td := recv_decl.GetBigPsi().tFormals
 	if len(tfs_td) != len(md.Psi_recv.tFormals) {
 		panic("Receiver type parameter arity mismatch:\n\tmdecl=" + md.t_recv +
-			md.Psi_recv.String() + ", tdecl=" + td.GetName() +
-			"\n\t" + td.GetBigPsi().String())
+			md.Psi_recv.String() + ", tdecl=" + recv_decl.GetName() +
+			"\n\t" + recv_decl.GetBigPsi().String())
 	}
 	for i := 0; i < len(tfs_td); i++ {
 		subs_md := makeParamIndexSubs(md.Psi_recv)
-		subs_td := makeParamIndexSubs(td.GetBigPsi())
+		subs_td := makeParamIndexSubs(recv_decl.GetBigPsi())
 		if !md.Psi_recv.tFormals[i].u_I.TSubs(subs_md). // Canonicalised
 								Impls(ds, tfs_td[i].u_I.TSubs(subs_td)) {
 			panic("Receiver parameter upperbound not a subtype of type decl upperbound:" +
@@ -194,7 +180,14 @@ func (md MethDecl) Ok(ds []Decl) {
 				tfs_td[i].String())
 		}
 	}
-
+	// Phi, Psi ok
+	md.Psi_recv.Ok(ds, make(Delta))
+	delta := md.Psi_recv.ToDelta()
+	md.Psi_meth.Ok(ds, delta)
+	for _, v := range md.Psi_meth.tFormals {
+		delta[v.name] = v.u_I
+	}
+	// distinct; params ok; construct gamma for body typing
 	as := md.Psi_recv.Hat()                          // !!! submission version, x:t_S(a) => x:t_S(~a)
 	gamma := Gamma{md.x_recv: TNamed{md.t_recv, as}} // CHECKME: can we give the bounds directly here instead of 'as'?
 	seen := make(map[Name]Name)
@@ -341,9 +334,8 @@ func (t TypeDecl) GetSourceType() Type { return t.srcType }
 
 func (t TypeDecl) Ok(ds []base.Decl) {
 	// check type formals
-	t.Psi.Ok(ds, PRIMITIVE_PSI.ToDelta()) // TODO HACKED
-	root := makeRootPsi(t.Psi) // TODO is makeRootPsi only needed because of PRIMITIVE_PSI?
-	delta := root.ToDelta()
+	t.Psi.Ok(ds, make(Delta))
+	delta := t.Psi.ToDelta()
 	// check source type
 	t.srcType.Ok(ds, delta)
 
@@ -372,19 +364,10 @@ func (t TypeDecl) String() string {
 	}
 }*/
 
-func makeRootPsi(Psi BigPsi) BigPsi {
-	tFormals := make([]TFormal, len(PRIMITIVE_PSI.tFormals)+len(Psi.tFormals))
-	for i, v := range PRIMITIVE_PSI.tFormals {
-		tFormals[i] = v
-	}
-	for i, v := range Psi.tFormals {
-		tFormals[i+len(PRIMITIVE_PSI.tFormals)] = v
-	}
-	return BigPsi{tFormals}
-}
-
 // For a type declaration decl, searches for any occurrence
-// of decl.GetName() in the target type, recursively
+// of decl.GetName() in the target type.
+// If the target type is a struct/interface type,
+// checks if its underlying type embeds decl.GetName().
 func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type) {
 	switch target := target.(type) {
 	case TParam, TPrimitive:

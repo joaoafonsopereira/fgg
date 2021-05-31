@@ -7,10 +7,18 @@ import (
 	"strings"
 )
 
+/* Exports */
+
+func NewTParam(name Name) TParam                 { return TParam(name) }
+func NewTNamed(t Name, us []Type) TNamed         { return TNamed{t, us} }
+func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
+func NewSTypeLit(fds []FieldDecl) STypeLit       { return STypeLit{fds} }
+func NewITypeLit(specs []Spec) ITypeLit          { return ITypeLit{specs} }
 
 /* Type parameters */
 
 type TParam Name
+
 var _ Type = TParam("")
 
 func (a TParam) TSubs(subs map[TParam]Type) Type {
@@ -23,10 +31,7 @@ func (a TParam) TSubs(subs map[TParam]Type) Type {
 	return res
 }
 
-func (a TParam) SubsEta(eta Eta) TNamed {
-	if _, ok := PRIMITIVE_TYPES[a]; ok {
-		return STRING_TYPE_MONOM // HACK TODO: refactor prims map as TParam->TNamed (map to monom rep)
-	}
+func (a TParam) SubsEta(eta Eta) GroundType {
 	res, ok := eta[a]
 	if !ok {
 		panic("Shouldn't get here: " + a)
@@ -68,9 +73,6 @@ func (a TParam) Impls(ds []Decl, t base.Type) bool {
 }
 
 func (a TParam) Ok(ds []Decl, delta Delta) {
-	if _, ok := PRIMITIVE_TYPES[a]; ok { // TODO remove this check as it is only necessary with the string "hack"
-		return
-	}
 	if _, ok := delta[a]; !ok {
 		panic("Type param " + a.String() + " unknown in context: " + delta.String())
 	}
@@ -119,7 +121,7 @@ func (u0 TNamed) TSubs(subs map[TParam]Type) Type {
 	return TNamed{u0.t_name, us}
 }
 
-func (u0 TNamed) SubsEta(eta Eta) TNamed {
+func (u0 TNamed) SubsEta(eta Eta) GroundType {
 	//fmt.Println("555:", u0, eta)
 	us := make([]Type, len(u0.u_args))
 	for i := 0; i < len(us); i++ {
@@ -144,7 +146,7 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	switch u := u.(type) {
 	case TParam: // e.g., fgg_test.go, Test014 TODO revise this
 		panic("Type name does not implement open type param: found=" +
-			  u0.String() + ", expected=" + u.String())
+			u0.String() + ", expected=" + u.String())
 	case TPrimitive:
 		return false
 	case STypeLit: // or any other composite type literal, if there were more
@@ -253,9 +255,14 @@ func (u TNamed) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
-func (u TNamed) Underlying(ds []Decl) Type {
+func (u TNamed) Underlying(ds []Decl) Type { // TODO checkar a cena de fazer TSubs logo no underlying
 	decl := getTDecl(ds, u.t_name)
-	return decl.GetSourceType().Underlying(ds)
+	under := decl.GetSourceType().Underlying(ds)
+	// the underlying type itself may have type variables, as in e.g.
+	// type S[T any] struct { x T }
+	//  -> the underlying of S[int] is struct { x int }, hence the TSubs
+	subs := MakeTSubs(decl.Psi, u.u_args)
+	return under.TSubs(subs)
 }
 
 /******************************************************************************/
@@ -275,9 +282,8 @@ func (t TPrimitive) TSubs(subs map[TParam]Type) Type {
 	return t
 }
 
-func (t TPrimitive) SubsEta(eta Eta) TNamed {
-	//TODO how to overcome the fact that this returns a TNamed
-	panic("TPrimitive.SubsEta") // not relevant until mono phase
+func (t TPrimitive) SubsEta(eta Eta) GroundType {
+	return t
 }
 
 func (t TPrimitive) SubsEtaOpen(eta EtaOpen) Type {
@@ -292,6 +298,10 @@ func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
 		return false
 	}
 	switch t0.tag {
+	case BOOL:
+		return t.tag == BOOL
+	case STRING:
+		return t.tag == STRING
 	case INT32, INT64:
 		return INT32 <= t.tag && t.tag <= FLOAT64 // kind of ad-hoc
 	case FLOAT32, FLOAT64:
@@ -313,8 +323,8 @@ func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	case TNamed:
 		if t0.Undefined() { // e.g. 1 'implements' MyInt
 			return t0.ImplsDelta(ds, delta, u.Underlying(ds))
-		} else {
-			return isNamedIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
+		} else { // but e.g. int doesn't implement MyInt
+			return isIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
 		}
 	case ITypeLit:
 		return len(methods(ds, u_cast)) == 0 // or if t0 belongs to type list
@@ -378,7 +388,7 @@ func (s STypeLit) TSubs(subs map[TParam]Type) Type {
 	return STypeLit{fds}
 }
 
-func (s STypeLit) SubsEta(eta Eta) TNamed {
+func (s STypeLit) SubsEta(eta Eta) GroundType {
 	//fds := make([]FieldDecl, len(s.fDecls))
 	//for i, fd := range s.fDecls {
 	//	fds[i] = fd.SubsEta(eta)
@@ -451,7 +461,6 @@ func (s STypeLit) Underlying(ds []Decl) Type {
 	return s
 }
 
-
 type FieldDecl struct {
 	field Name
 	u     Type // u=tau
@@ -505,7 +514,7 @@ func (i ITypeLit) TSubs(subs map[TParam]Type) Type {
 	return ITypeLit{specs}
 }
 
-func (i ITypeLit) SubsEta(eta Eta) TNamed {
+func (i ITypeLit) SubsEta(eta Eta) GroundType {
 	panic("implement me")
 
 }
@@ -528,7 +537,7 @@ func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	if isIfaceType(ds, u) {
 		return false
 	}
-	gs := methodsDelta(ds, delta, u)   // u is a t_I
+	gs := methodsDelta(ds, delta, u) // u is a t_I
 	gs0 := methodsDelta(ds, delta, i)
 	return gs0.IsSupersetOf(gs)
 }
@@ -568,7 +577,33 @@ func (i ITypeLit) Ok(ds []Decl, delta Delta) {
 }
 
 func (i ITypeLit) Equals(t base.Type) bool {
-	panic("implement me")
+	other, ok := t.(ITypeLit)
+	if !ok {
+		return false
+	}
+
+	// goal: methodSet(i) == methodSet(other), regardless of order
+	// > this version is still sensible to order
+	for idx, spec := range i.specs {
+		if !specEquals(spec, other.specs[idx]) {
+			return false
+		}
+	}
+	return true
+}
+
+func specEquals(s1, s2 Spec) bool {
+	switch s1 := s1.(type) {
+	case TNamed:
+		if named, ok := s2.(TNamed); ok {
+			return s1.Equals(named)
+		}
+	case Sig:
+		if g2, ok := s2.(Sig); ok {
+			return sigAlphaEquals(s1, g2)
+		}
+	}
+	return false
 }
 
 func (i ITypeLit) String() string {

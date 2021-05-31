@@ -2,17 +2,6 @@ package fg
 
 import "github.com/rhu1/fgg/internal/base"
 
-/* Export */
-
-func NewTPrimitive(t Tag, undefined bool) TPrimitive { return TPrimitive{t, undefined} }
-
-/* Constants */
-
-var STRING_TYPE = TNamed("string")
-
-func init() {
-	//PRIMITIVE_TYPES[STRING_TYPE] = STRING_TYPE
-}
 
 /* Aliases from base */
 
