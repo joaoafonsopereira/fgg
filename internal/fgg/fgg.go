@@ -34,9 +34,8 @@ type Decl = base.Decl
 type Type interface {
 	base.Type
 	ImplsDelta(ds []Decl, delta Delta, u Type) bool
-	TSubs(subs map[TParam]Type) Type // N.B. map is Delta -- factor out a Subs type?
-	SubsEta(eta Eta) GroundType
 	SubsEtaOpen(eta EtaOpen) Type
+	SubsEtaClosed(eta EtaClosed) GroundType
 	Ok(ds []Decl, delta Delta)
 	ToGoString(ds []Decl) string
 	Underlying(ds []Decl) Type
@@ -67,20 +66,6 @@ func (Psi BigPsi) Ok(ds []Decl, env Delta) {
 				"\n\t" + Psi.String())
 		}
 		v.u_I.Ok(ds, env) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
-
-		//u_I, ok := v.u_I.(TNamed)
-		//if !ok {
-		//	if _, foo := PRIMITIVE_TYPES[v.u_I.(TParam)]; !foo { // Only because PRIMITIVE_PSI hacks the upperbound like this
-		//		panic("Upper bound must be a named interface type: not " + v.u_I.String() +
-		//			"\n\t" + Psi.String())
-		//	}
-		//} else {
-		//	if !isNamedIfaceType(ds, u_I) {
-		//		panic("Upper bound must be a named interface type: not " + v.u_I.String() +
-		//			"\n\t" + Psi.String())
-		//	}
-		//	u_I.Ok(ds, env) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
-		//}
 	}
 }
 
@@ -135,10 +120,10 @@ func (tf TFormal) String() string {
 // Also ranged over by small phi
 type SmallPsi []Type // CHECKME: Currently only used in omega/monom, maybe deprecate?
 
-func (x0 SmallPsi) TSubs(subs map[TParam]Type) SmallPsi {
+func (x0 SmallPsi) SubsEtaOpen(eta EtaOpen) SmallPsi {
 	res := make(SmallPsi, len(x0))
 	for i, v := range x0 {
-		res[i] = v.TSubs(subs)
+		res[i] = v.SubsEtaOpen(eta)
 	}
 	return res
 }
@@ -168,9 +153,9 @@ func (x0 SmallPsi) Equals(x SmallPsi) bool {
 //type Gamma map[Variable]Type
 type Gamma map[Name]Type
 type Delta map[TParam]Type // Type intended to be an upper bound
-type Eta map[TParam]GroundType // TNamed intended to be a ground
 
-type EtaOpen map[TParam]Type // cf. Delta
+type EtaOpen map[TParam]Type         // cf. Delta todo would it make more sense to be just Eta? contrasting with EtaClosed
+type EtaClosed map[TParam]GroundType // TNamed intended to be a ground
 
 func (delta Delta) String() string {
 	res := "["
@@ -187,13 +172,24 @@ func (delta Delta) String() string {
 }
 
 // Pre: len(psi) == len(Psi.GetTFormals()); psi all ground
-func MakeEta(Psi BigPsi, psi SmallPsi) Eta {
-	eta := make(Eta)
+func MakeEtaClosed(Psi BigPsi, psi SmallPsi) EtaClosed {
+	eta := make(EtaClosed)
 	tfs := Psi.tFormals
 	for i := 0; i < len(tfs); i++ {
-		eta[tfs[i].name] = psi[i].(GroundType) // TODO maybe SmallPsi could be an []GroundType ?
+		eta[tfs[i].name] = psi[i].(GroundType) // TODO maybe SmallPsi could be []GroundType ?
 	}
 	return eta
+}
+
+// Although the result only contains mappings to ground types,
+// this conversion is necessary in the cases where there is no mapping
+// for a given type variable. Cf. Sig.SubsEtaOpen
+func (eta EtaClosed) ToEtaOpen() EtaOpen {
+	res := make(EtaOpen)
+	for k, v := range eta {
+		res[k] = v
+	}
+	return res
 }
 
 func MakeEtaDelta(ds []Decl, delta Delta, Psi BigPsi, psi SmallPsi) (bool, EtaOpen) {
@@ -217,16 +213,6 @@ func MakeEtaOpen(Psi BigPsi, psi SmallPsi) EtaOpen {
 	return eta
 }
 
-// TODO kind of duplicates Eta/EtaOpen, think how to merge with one of them
-//  (cf. MakeEta)
-func MakeTSubs(Psi BigPsi, u_args []Type) map[TParam]Type {
-	subs := make(map[TParam]Type)
-	for i := 0; i < len(Psi.tFormals); i++ {
-		subs[Psi.tFormals[i].name] = u_args[i]
-	}
-	return subs
-}
-
 /* AST base intefaces: FGGNode, Decl, Spec, Expr */
 
 // FGGNode, Name: see Aliases (at top)
@@ -239,7 +225,7 @@ type Spec interface {
 type FGGExpr interface {
 	base.Expr
 	Subs(subs map[Variable]FGGExpr) FGGExpr
-	TSubs(subs map[TParam]Type) FGGExpr
+	TSubs(subs EtaOpen) FGGExpr // TODO maybe rename to SubsEtaOpen (future SubsEta), for consistency?
 	// gamma and delta should be treated immutably
 	Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr)
 	Eval(ds []Decl) (FGGExpr, string)

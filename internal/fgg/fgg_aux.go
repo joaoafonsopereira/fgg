@@ -50,10 +50,10 @@ func fields(ds []Decl, u_S TNamed) []FieldDecl {
 	}
 
 	decl := getTDecl(ds, u_S.t_name)
-	subs := MakeTSubs(decl.Psi, u_S.u_args)
+	eta := MakeEtaOpen(decl.Psi, u_S.u_args) // TODO CHECKME: this subst is redundant after calling underlying
 	fds := make([]FieldDecl, len(s.fDecls))
 	for i := 0; i < len(s.fDecls); i++ {
-		fds[i] = s.fDecls[i].TSubs(subs)
+		fds[i] = s.fDecls[i].SubsEtaOpen(eta)
 	}
 	return fds
 }
@@ -91,7 +91,7 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 				md, ok := v.(MethDecl)
 				if ok && md.t_recv == u_cast.t_name {
 					if ok, eta := MakeEtaDelta(ds, delta, md.Psi_recv, u_cast.u_args); ok {
-						res[md.name] = md.ToSig().TSubs(eta)
+						res[md.name] = md.ToSig().SubsEtaOpen(eta)
 					}
 				}
 			}
@@ -119,18 +119,18 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 //func body(ds []Decl, u_S TNamed, m Name, targs []Type) (Name, []Name, FGGExpr) {
 func body(ds []Decl, u_S TNamed, m Name, targs []Type) (ParamDecl, []ParamDecl, FGGExpr) {
 	md := getMethDecl(ds, u_S.t_name, m) // panics if not found
-	subs := MakeTSubs(md.Psi_recv, u_S.u_args) // cf MakeEta
+	theta := MakeEtaOpen(md.Psi_recv, u_S.u_args) // cf MakeEta
 	for i := 0; i < len(md.Psi_meth.tFormals); i++ { //TODO TSubs.add() ..., TSubs vs SubsEtaOpen
-		subs[md.Psi_meth.tFormals[i].name] = targs[i]
+		theta[md.Psi_meth.tFormals[i].name] = targs[i]
 	}
 	recv := ParamDecl{md.x_recv, u_S}
 	pds := make([]ParamDecl, len(md.pDecls))
 	for i := 0; i < len(md.pDecls); i++ {
 		tmp := md.pDecls[i]
-		pds[i] = ParamDecl{tmp.name, tmp.u.TSubs(subs)}
+		pds[i] = ParamDecl{tmp.name, tmp.u.SubsEtaOpen(theta)}
 	}
 	//return md.x_recv, xs, md.e_body.TSubs(subs)
-	return recv, pds, md.e_body.TSubs(subs)
+	return recv, pds, md.e_body.TSubs(theta)
 }
 
 // Represents the aux function type() defined in fig.16 of the paper.
@@ -177,14 +177,14 @@ func sigAlphaEquals(g0 Sig, g Sig) bool {
 	subs0 := makeParamIndexSubs(g0.Psi)
 	subs := makeParamIndexSubs(g.Psi)
 	for i := 0; i < len(g0.Psi.tFormals); i++ {
-		if !g0.Psi.tFormals[i].u_I.TSubs(subs0).
-			Equals(g.Psi.tFormals[i].u_I.TSubs(subs)) {
+		if !g0.Psi.tFormals[i].u_I.SubsEtaOpen(subs0).
+			Equals(g.Psi.tFormals[i].u_I.SubsEtaOpen(subs)) {
 			//fmt.Println("z:")
 			return false
 		}
 	}
 	for i := 0; i < len(g0.pDecls); i++ {
-		if !g0.pDecls[i].u.TSubs(subs0).Equals(g.pDecls[i].u.TSubs(subs)) {
+		if !g0.pDecls[i].u.SubsEtaOpen(subs0).Equals(g.pDecls[i].u.SubsEtaOpen(subs)) {
 			/*fmt.Println("w1: ", g0.pDecls[i].u, g0.pDecls[i].u.TSubs(subs0))
 			fmt.Println("w2: ", g.pDecls[i].u, g.pDecls[i].u.TSubs(subs))
 			fmt.Println("y:")*/
@@ -195,12 +195,13 @@ func sigAlphaEquals(g0 Sig, g Sig) bool {
 	fmt.Println("2:", g)
 	fmt.Println("3:", g0.meth == g.meth, g0.u_ret.Equals(g.u_ret))
 	fmt.Println("4:", g0.u_ret.TSubs(subs0).Equals(g.u_ret.TSubs(subs)))*/
-	return g0.meth == g.meth && g0.u_ret.TSubs(subs0).Equals(g.u_ret.TSubs(subs))
+	return g0.meth == g.meth &&
+		g0.u_ret.SubsEtaOpen(subs0).Equals(g.u_ret.SubsEtaOpen(subs))
 }
 
 // CHECKME: Used by sigAlphaEquals, and MDecl.OK (for covariant receiver bounds)
-func makeParamIndexSubs(Psi BigPsi) Delta {
-	subs := make(Delta)
+func makeParamIndexSubs(Psi BigPsi) EtaOpen {
+	subs := make(EtaOpen)
 	for j := 0; j < len(Psi.tFormals); j++ {
 		//subs[Psi.tFormals[j].name] = Psi.tFormals[j].name
 		subs[Psi.tFormals[j].name] = TParam("α" + strconv.Itoa(j+1))

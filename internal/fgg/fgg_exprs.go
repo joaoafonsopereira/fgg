@@ -42,7 +42,7 @@ func (x Variable) Subs(m map[Variable]FGGExpr) FGGExpr {
 	return res
 }
 
-func (x Variable) TSubs(subs map[TParam]Type) FGGExpr {
+func (x Variable) TSubs(subs EtaOpen) FGGExpr {
 	return x
 }
 
@@ -97,12 +97,12 @@ func (s StructLit) Subs(subs map[Variable]FGGExpr) FGGExpr {
 	return StructLit{s.u_S, es}
 }
 
-func (s StructLit) TSubs(subs map[TParam]Type) FGGExpr {
+func (s StructLit) TSubs(subs EtaOpen) FGGExpr {
 	es := make([]FGGExpr, len(s.elems))
 	for i := 0; i < len(s.elems); i++ {
 		es[i] = s.elems[i].TSubs(subs)
 	}
-	return StructLit{s.u_S.TSubs(subs).(TNamed), es}
+	return StructLit{s.u_S.SubsEtaOpen(subs).(TNamed), es}
 }
 
 func (s StructLit) Eval(ds []Decl) (FGGExpr, string) {
@@ -223,7 +223,7 @@ func (s Select) Subs(subs map[Variable]FGGExpr) FGGExpr {
 	return Select{s.e_S.Subs(subs), s.field}
 }
 
-func (s Select) TSubs(subs map[TParam]Type) FGGExpr {
+func (s Select) TSubs(subs EtaOpen) FGGExpr {
 	return Select{s.e_S.TSubs(subs), s.field}
 }
 
@@ -311,10 +311,10 @@ func (c Call) Subs(subs map[Variable]FGGExpr) FGGExpr {
 	return Call{e, c.meth, c.t_args, args}
 }
 
-func (c Call) TSubs(subs map[TParam]Type) FGGExpr {
+func (c Call) TSubs(subs EtaOpen) FGGExpr {
 	targs := make([]Type, len(c.t_args))
 	for i := 0; i < len(c.t_args); i++ {
-		targs[i] = c.t_args[i].TSubs(subs)
+		targs[i] = c.t_args[i].SubsEtaOpen(subs)
 	}
 	args := make([]FGGExpr, len(c.args))
 	for i := 0; i < len(c.args); i++ {
@@ -382,9 +382,10 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 		b.WriteString(c.String())
 		panic(b.String())
 	}
-	subs := MakeTSubs(g.Psi, c.t_args) // CHECKME: applying this subs vs. adding to a new delta?  // Cf. MakeEta
+	// duplicates MakeEtaDelta
+	eta := MakeEtaOpen(g.Psi, c.t_args) // CHECKME: applying this subs vs. adding to a new delta?  // Cf. MakeEta TODO CHECK THIS
 	for i := 0; i < len(c.t_args); i++ {
-		u := g.Psi.tFormals[i].u_I.TSubs(subs)
+		u := g.Psi.tFormals[i].u_I.SubsEtaOpen(eta)
 		if !c.t_args[i].ImplsDelta(ds, delta, u) {
 			panic("Type actual must implement type formal: actual=" +
 				c.t_args[i].String() + ", param=" + u.String() + "\n\t" + c.String())
@@ -398,7 +399,7 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 		// ..falsely captures "repeat" var occurrences in recursive calls, ..
 		// ..e.g., bad monomorph (Box) example.
 		// The ~beta morally do not occur in ~tau, they only bind ~rho
-		u_p := g.pDecls[i].u.TSubs(subs)
+		u_p := g.pDecls[i].u.SubsEtaOpen(eta)
 		if !u_a.ImplsDelta(ds, delta, u_p) {
 			panic("Arg expr type must implement param type: arg=" + u_a.String() +
 				", param=" + u_p.String() + "\n\t" + c.String())
@@ -410,7 +411,8 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 			args[i] = ConvertLitNode(lit, u_p)
 		}
 	}
-	return g.u_ret.TSubs(subs), Call{e_recv, c.meth, c.t_args, args} // subs necessary, c.psi info (i.e., bounds) will be "lost" after leaving this context
+	return g.u_ret.SubsEtaOpen(eta), // subs necessary, c.psi info (i.e., bounds) will be "lost" after leaving this context
+	Call{e_recv, c.meth, c.t_args, args}
 }
 
 // From base.Expr
@@ -480,8 +482,8 @@ func (a Assert) Subs(subs map[Variable]FGGExpr) FGGExpr {
 	return Assert{a.e_I.Subs(subs), a.u_cast}
 }
 
-func (a Assert) TSubs(subs map[TParam]Type) FGGExpr {
-	return Assert{a.e_I.TSubs(subs), a.u_cast.TSubs(subs)}
+func (a Assert) TSubs(subs EtaOpen) FGGExpr {
+	return Assert{a.e_I.TSubs(subs), a.u_cast.SubsEtaOpen(subs)}
 }
 
 func (a Assert) Eval(ds []Decl) (FGGExpr, string) {
@@ -573,7 +575,7 @@ func (s Sprintf) Subs(subs map[Variable]FGGExpr) FGGExpr {
 	return Sprintf{s.format, args}
 }
 
-func (s Sprintf) TSubs(subs map[TParam]Type) FGGExpr {
+func (s Sprintf) TSubs(subs EtaOpen) FGGExpr {
 	return s
 }
 

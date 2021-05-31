@@ -174,7 +174,7 @@ func (md MethDecl) Ok(ds []Decl) {
 	subs_md := makeParamIndexSubs(md.Psi_recv)
 	subs_td := makeParamIndexSubs(recv_decl.GetBigPsi())
 	for i := 0; i < len(tfs_td); i++ {
-		if !tfs_md[i].u_I.TSubs(subs_md).Impls(ds, tfs_td[i].u_I.TSubs(subs_td)) { // Canonicalised
+		if !tfs_md[i].u_I.SubsEtaOpen(subs_md).Impls(ds, tfs_td[i].u_I.SubsEtaOpen(subs_td)) { // Canonicalised
 			panic("Receiver parameter upperbound not a subtype of type decl upperbound:" +
 				"\n\tmdecl=" + tfs_md[i].String() +
 				", tdecl=" + tfs_td[i].String())
@@ -271,18 +271,20 @@ func (g Sig) GetPsi() BigPsi             { return g.Psi }
 func (g Sig) GetParamDecls() []ParamDecl { return g.pDecls }
 func (g Sig) GetReturn() Type            { return g.u_ret }
 
-func (g Sig) TSubs(subs map[TParam]Type) Sig {
+//func (g Sig) TSubs(subs map[TParam]Type) Sig {
+// Only makes sense to have SubsEtaOpen, as eta will never contain mappings
+// for the type vars belonging to g.Psi. TODO why is that?
+// The parameters are only fully instantiated in monomSig1 [fgg_monom.go]
+func (g Sig) SubsEtaOpen(eta EtaOpen) Sig {
 	tfs := make([]TFormal, len(g.Psi.tFormals))
-	for i := 0; i < len(g.Psi.tFormals); i++ {
-		tf := g.Psi.tFormals[i]
-		tfs[i] = TFormal{tf.name.TSubs(subs).(TParam), tf.u_I.TSubs(subs)}
+	for i, tf := range g.Psi.tFormals {
+		tfs[i] = TFormal{tf.name, tf.u_I.SubsEtaOpen(eta)}
 	}
 	ps := make([]ParamDecl, len(g.pDecls))
-	for i := 0; i < len(ps); i++ {
-		pd := g.pDecls[i]
-		ps[i] = ParamDecl{pd.name, pd.u.TSubs(subs)}
+	for i, pd := range g.pDecls {
+		ps[i] = ParamDecl{pd.name, pd.u.SubsEtaOpen(eta)}
 	}
-	u := g.u_ret.TSubs(subs)
+	u := g.u_ret.SubsEtaOpen(eta)
 	return Sig{g.meth, BigPsi{tfs}, ps, u}
 }
 

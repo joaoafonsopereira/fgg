@@ -138,7 +138,7 @@ func (x PrimitiveLiteral) Subs(map[Variable]FGGExpr) FGGExpr {
 	return x
 }
 
-func (x PrimitiveLiteral) TSubs(_ map[TParam]Type) FGGExpr {
+func (x PrimitiveLiteral) TSubs(_ EtaOpen) FGGExpr {
 	return x
 }
 
@@ -237,12 +237,12 @@ func (x Float32Val) Subs(map[Variable]FGGExpr) FGGExpr { return x }
 func (x Float64Val) Subs(map[Variable]FGGExpr) FGGExpr { return x }
 func (x StringVal) Subs(map[Variable]FGGExpr) FGGExpr  { return x }
 
-func (x BoolVal) TSubs(map[TParam]Type) FGGExpr    { return x }
-func (x Int32Val) TSubs(map[TParam]Type) FGGExpr   { return x }
-func (x Int64Val) TSubs(map[TParam]Type) FGGExpr   { return x }
-func (x Float32Val) TSubs(map[TParam]Type) FGGExpr { return x }
-func (x Float64Val) TSubs(map[TParam]Type) FGGExpr { return x }
-func (x StringVal) TSubs(map[TParam]Type) FGGExpr  { return x }
+func (x BoolVal) TSubs(EtaOpen) FGGExpr    { return x }
+func (x Int32Val) TSubs(EtaOpen) FGGExpr   { return x }
+func (x Int64Val) TSubs(EtaOpen) FGGExpr   { return x }
+func (x Float32Val) TSubs(EtaOpen) FGGExpr { return x }
+func (x Float64Val) TSubs(EtaOpen) FGGExpr { return x }
+func (x StringVal) TSubs(EtaOpen) FGGExpr  { return x }
 
 func (x BoolVal) Eval([]Decl) (FGGExpr, string)    { panic("Cannot reduce: " + x.String()) }
 func (x Int32Val) Eval([]Decl) (FGGExpr, string)   { panic("Cannot reduce: " + x.String()) }

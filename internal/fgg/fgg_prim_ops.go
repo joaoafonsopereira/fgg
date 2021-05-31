@@ -76,7 +76,7 @@ func (b BaseBinaryOperation) Subs(subs map[Variable]FGGExpr) FGGExpr {
 	return NewBinaryOp(b.left.Subs(subs), b.right.Subs(subs), b.op)
 }
 
-func (b BaseBinaryOperation) TSubs(subs map[TParam]Type) FGGExpr {
+func (b BaseBinaryOperation) TSubs(subs EtaOpen) FGGExpr {
 	return NewBinaryOp(b.left.TSubs(subs), b.right.TSubs(subs), b.op)
 }
 

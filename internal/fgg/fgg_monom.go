@@ -59,7 +59,7 @@ func ApplyOmega(p FGGProgram, omega Omega) fg.FGProgram {
 				"\n\t" + d.String())
 		}
 	}
-	e_monom := monomExpr1(p.e_main, make(Eta), omega)
+	e_monom := monomExpr1(p.e_main, make(EtaClosed), omega)
 	//ds_monom = append(ds_monom, fg.NewSTypeLit(empty_S, []fg.FieldDecl{}))
 	ds_monom = append(ds_monom, fg.NewTypeDecl(empty_I.GetName(), fg.ITypeLit{})) // TODO THIS IS JUST A QUICK FIX
 	return fg.NewFGProgram(ds_monom, e_monom, p.printf)
@@ -71,7 +71,7 @@ func monomTDecl1(omega Omega, td TypeDecl) []fg.TypeDecl {
 	for _, u := range omega.us {
 		u_N, ok := u.(TNamed)
 		if ok && u_N.t_name == t {
-			eta := MakeEta(td.GetBigPsi(), u_N.u_args)
+			eta := MakeEtaClosed(td.GetBigPsi(), u_N.u_args)
 			mu := makeMu(u_N, omega)
 
 			t_monom := toMonomId(u_N)
@@ -83,10 +83,10 @@ func monomTDecl1(omega Omega, td TypeDecl) []fg.TypeDecl {
 	return res
 }
 
-func monomType(fgg_type Type, eta Eta, mu Mu, omega Omega) fg.Type { // TODO where should the substitution be applied?? only upon reaching the leaves??
+func monomType(fgg_type Type, eta EtaClosed, mu Mu, omega Omega) fg.Type {
 	switch t := fgg_type.(type) {
 	case TParam:
-		subs := t.SubsEta(eta) // todo does it make sense to apply monomType to a TParam?
+		subs := t.SubsEtaClosed(eta)
 		return monomType(subs, eta, nil, omega)
 	case TPrimitive:
 		return fg.NewTPrimitive(fg.Tag(t.tag), t.undefined) // t.undefined should always be false
@@ -108,12 +108,12 @@ func monomType(fgg_type Type, eta Eta, mu Mu, omega Omega) fg.Type { // TODO whe
 	}
 }
 
-func monomTNamed(u TNamed, eta Eta) fg.TNamed {
-	t_subs := u.SubsEta(eta).(TNamed)
+func monomTNamed(u TNamed, eta EtaClosed) fg.TNamed {
+	t_subs := u.SubsEtaClosed(eta).(TNamed)
 	return toMonomId(t_subs)
 }
 
-func monomSTypeLit1(s STypeLit, eta Eta, omega Omega) fg.STypeLit {
+func monomSTypeLit1(s STypeLit, eta EtaClosed, omega Omega) fg.STypeLit {
 	fds := make([]fg.FieldDecl, len(s.fDecls))
 	for i, fd := range s.fDecls {
 		t_monom := monomType(fd.u, eta, nil, omega)
@@ -122,13 +122,9 @@ func monomSTypeLit1(s STypeLit, eta Eta, omega Omega) fg.STypeLit {
 	return fg.NewSTypeLit(fds)
 }
 
-func monomITypeLit1(c ITypeLit, eta Eta, mu Mu, omega Omega) fg.ITypeLit {
+func monomITypeLit1(c ITypeLit, eta EtaClosed, mu Mu, omega Omega) fg.ITypeLit {
 	var ss []fg.Spec
 	pds_empty := []fg.ParamDecl{}
-	subs := make(Delta) // TODO: refactor -- because of Sig.TSubs
-	for k, v := range eta {
-		subs[k] = v
-	}
 	for _, v := range c.specs {
 		switch s := v.(type) {
 		case Sig: // !!! M contains Psi
@@ -136,14 +132,16 @@ func monomITypeLit1(c ITypeLit, eta Eta, mu Mu, omega Omega) fg.ITypeLit {
 				if m.meth != s.meth {
 					continue
 				}
-				theta := MakeEta(s.Psi, m.psi)
+				theta := MakeEtaClosed(s.Psi, m.psi)
 				for k, v := range eta {
 					theta[k] = v
 				}
 				g_monom := monomSig1(s, m, theta, omega) // !!! small psi
 				ss = append(ss, g_monom)
 			}
-			hash := fg.NewSig(toHashSig(s.TSubs(subs)), pds_empty, empty_I)
+			// dummy
+			dummyName := toHashSig(s.SubsEtaOpen(eta.ToEtaOpen())) // eta is open in this context - doesn't include mappings for vars in s.Psi (contrasting with theta above)
+			hash := fg.NewSig(dummyName, pds_empty, empty_I)
 			ss = append(ss, hash)
 		case TNamed: // Embedded
 			ss = append(ss, monomTNamed(s, eta))
@@ -155,7 +153,7 @@ func monomITypeLit1(c ITypeLit, eta Eta, mu Mu, omega Omega) fg.ITypeLit {
 	return fg.NewITypeLit(ss)
 }
 
-func monomSig1(g Sig, m MethInstan, eta Eta, omega Omega) fg.Sig { // TODO uma Sig devia incluir o nome do método?? paper dá a entender que nao
+func monomSig1(g Sig, m MethInstan, eta EtaClosed, omega Omega) fg.Sig { // TODO uma Sig devia incluir o nome do método?? paper dá a entender que nao
 	//getMonomMethName(omega Omega, m Name, targs []Type) Name {
 	m_monom := toMonomMethName1(m.meth, m.psi, eta, omega) // !!! small psi
 	pds_monom := make([]fg.ParamDecl, len(g.pDecls))
@@ -178,7 +176,7 @@ func monomMDecl1(omega Omega, md MethDecl) []fg.MethDecl {
 		if !(isTNamed && u_recv.t_name == md.t_recv && m.meth == md.name) {
 			continue
 		}
-		theta := MakeEta(md.Psi_recv, u_recv.u_args)
+		theta := MakeEtaClosed(md.Psi_recv, u_recv.u_args)
 		for i := 0; i < len(md.Psi_meth.tFormals); i++ {
 			theta[md.Psi_meth.tFormals[i].name] = m.psi[i].(GroundType)
 		}
@@ -194,24 +192,22 @@ func monomMDecl1(omega Omega, md MethDecl) []fg.MethDecl {
 
 	// D'
 	for _, u := range omega.us {
-		u_N, isTNamed := u.(TNamed)
-		if !isTNamed || u_N.t_name != md.t_recv {
+		u_recv, isTNamed := u.(TNamed)
+		if !isTNamed || u_recv.t_name != md.t_recv {
 			continue
 		}
-		recv_monom := fg.NewParamDecl(md.x_recv, toMonomId(u_N)) // !!! t_S(phi) already ground receiver
-		eta := MakeEta(md.Psi_recv, u_N.u_args)
-		subs := make(Delta) // TODO: refactor -- because of Sig.TSubs
-		for k, v := range eta {
-			subs[k] = v
-		}
-		g := md.ToSig().TSubs(subs)
+		recv_monom := fg.NewParamDecl(md.x_recv, toMonomId(u_recv)) // !!! t_S(phi) already ground receiver
+		// has to be open: doesn't include mappings for md.Psi
+		// (contrasting with theta, above)
+		eta := MakeEtaOpen(md.Psi_recv, u_recv.u_args)
+		g := md.ToSig().SubsEtaOpen(eta)
 		hash := fg.NewMDecl(recv_monom, toHashSig(g), pds_empty, empty_I, e_empty)
 		res = append(res, hash)
 	}
 	return res
 }
 
-func monomExpr1(e1 FGGExpr, eta Eta, omega Omega) fg.FGExpr {
+func monomExpr1(e1 FGGExpr, eta EtaClosed, omega Omega) fg.FGExpr {
 	switch e := e1.(type) {
 	case Variable:
 		return fg.NewVariable(e.name)
@@ -319,7 +315,7 @@ func toMonomId(u TNamed) fg.TNamed {
 
 // !!! CHECKME: psi should already be grounded, eta unnecessary?
 // TODO: this method is kind of overloaded, as it represents both M-METHOD & M-MFORMAL (fig. 21)
-func toMonomMethName1(m Name, psi SmallPsi, eta Eta, omega Omega) Name {
+func toMonomMethName1(m Name, psi SmallPsi, eta EtaClosed, omega Omega) Name {
 	if len(psi) == 0 {
 		return m + "<>"
 	}

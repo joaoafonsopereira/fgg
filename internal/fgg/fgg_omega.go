@@ -214,8 +214,8 @@ func auxT(ds []Decl, omega Omega) bool {
 		}
 		td := getTDecl(ds, u_N.t_name)
 		if src, ok := td.GetSourceType().(TNamed); ok {
-			eta := MakeEta(td.GetBigPsi(), u_N.GetTArgs())
-			ground_src := src.SubsEta(eta)
+			eta := MakeEtaClosed(td.GetBigPsi(), u_N.GetTArgs())
+			ground_src := src.SubsEtaClosed(eta)
 			tmp[toKey_Wt(ground_src)] = ground_src
 		}
 	}
@@ -285,12 +285,12 @@ func auxM(ds []Decl, omega Omega) bool {
 	tmp := make(map[string]GroundType)
 	for _, m := range omega.ms {
 		sig := methods(ds, m.u_recv)[m.meth]
-		eta := MakeEta(sig.Psi, m.psi)
+		eta := MakeEtaClosed(sig.Psi, m.psi)
 		for _, pd := range sig.pDecls {
-			u_pd := pd.u.SubsEta(eta) // HERE: need receiver subs also? cf. map.fgg "type b Eq(b)" -- methods should be ok? -> no: subs performed in methods(m.u_recv)
+			u_pd := pd.u.SubsEtaClosed(eta) // HERE: need receiver subs also? cf. map.fgg "type b Eq(b)" -- methods should be ok? -> no: subs performed in methods(m.u_recv)
 			tmp[toKey_Wt(u_pd)] = u_pd
 		}
-		u_ret := sig.u_ret.SubsEta(eta)
+		u_ret := sig.u_ret.SubsEtaClosed(eta)
 		tmp[toKey_Wt(u_ret)] = u_ret
 	}
 	for k, v := range tmp {

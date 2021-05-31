@@ -21,28 +21,18 @@ type TParam Name
 
 var _ Type = TParam("")
 
-func (a TParam) TSubs(subs map[TParam]Type) Type {
-	res, ok := subs[a]
-	if !ok {
-		//panic("Unknown param: " + a.String())
-		return a // CHECKME: ok? -- see TSubs in methods aux, w.r.t. meth-tparams that aren't in the subs map
-		// Cf. Variable.Subs?
-	}
-	return res
-}
-
-func (a TParam) SubsEta(eta Eta) GroundType {
-	res, ok := eta[a]
-	if !ok {
-		panic("Shouldn't get here: " + a)
-	}
-	return res
-}
-
 func (a TParam) SubsEtaOpen(eta EtaOpen) Type {
 	res, ok := eta[a]
 	if !ok {
 		return a
+	}
+	return res
+}
+
+func (a TParam) SubsEtaClosed(eta EtaClosed) GroundType {
+	res, ok := eta[a]
+	if !ok {
+		panic("Shouldn't get here: " + a)
 	}
 	return res
 }
@@ -81,7 +71,7 @@ func (a TParam) Ok(ds []Decl, delta Delta) {
 func (a TParam) Equals(t base.Type) bool {
 	u := asFGGType(t)
 	if b, ok := u.(TParam); ok {
-		return a == b // Handles primitives TODO check this
+		return a == b
 	}
 	return false
 }
@@ -113,28 +103,20 @@ var _ Spec = TNamed{}
 func (u0 TNamed) GetName() Name    { return u0.t_name }
 func (u0 TNamed) GetTArgs() []Type { return u0.u_args } // SmallPsi
 
-func (u0 TNamed) TSubs(subs map[TParam]Type) Type {
-	us := make([]Type, len(u0.u_args))
-	for i := 0; i < len(us); i++ {
-		us[i] = u0.u_args[i].TSubs(subs)
-	}
-	return TNamed{u0.t_name, us}
-}
-
-func (u0 TNamed) SubsEta(eta Eta) GroundType {
-	//fmt.Println("555:", u0, eta)
-	us := make([]Type, len(u0.u_args))
-	for i := 0; i < len(us); i++ {
-		us[i] = u0.u_args[i].SubsEta(eta)
-	}
-	return TNamed{u0.t_name, us}
-}
-
 func (u0 TNamed) SubsEtaOpen(eta EtaOpen) Type {
 	//fmt.Println("555:", u0, eta)
 	us := make([]Type, len(u0.u_args))
 	for i := 0; i < len(us); i++ {
 		us[i] = u0.u_args[i].SubsEtaOpen(eta)
+	}
+	return TNamed{u0.t_name, us}
+}
+
+func (u0 TNamed) SubsEtaClosed(eta EtaClosed) GroundType {
+	//fmt.Println("555:", u0, eta)
+	us := make([]Type, len(u0.u_args))
+	for i := 0; i < len(us); i++ {
+		us[i] = u0.u_args[i].SubsEtaClosed(eta)
 	}
 	return TNamed{u0.t_name, us}
 }
@@ -176,7 +158,6 @@ func (u0 TNamed) Impls(ds []Decl, u base.Type) bool {
 }
 
 func (u0 TNamed) Ok(ds []Decl, delta Delta) {
-	//if _, ok
 	td := getTDecl(ds, u0.t_name) // Panics if type not found
 	Psi := td.GetBigPsi()
 	if len(Psi.tFormals) != len(u0.u_args) {
@@ -189,18 +170,19 @@ func (u0 TNamed) Ok(ds []Decl, delta Delta) {
 		b.WriteString(u0.String())
 		panic(b.String())
 	}
-	subs := MakeTSubs(Psi, u0.u_args)
-	for i := 0; i < len(Psi.tFormals); i++ {
-		actual := Psi.tFormals[i].name.TSubs(subs)
+	for _, v := range u0.u_args {
+		v.Ok(ds, delta)
+	}
+	// Duplicates MakeEtaDelta so as to pinpoint wrong (\alpha, u_I) pair
+	eta := MakeEtaOpen(Psi, u0.u_args)
+	for _, tf := range Psi.tFormals {
+		actual := tf.name.SubsEtaOpen(eta)
 		// CHECKME: submission T-Named, subs applied to Delta? -- already applied, Delta is coming from the subs context
-		formal := Psi.tFormals[i].u_I.TSubs(subs)
-		if !actual.ImplsDelta(ds, delta, formal) { // tfs[i].u is a \tau_I, checked by TDecl.Ok
+		formal := tf.u_I.SubsEtaOpen(eta)
+		if !actual.ImplsDelta(ds, delta, formal) { // formal is a \tau_I, checked by TDecl.Ok
 			panic("Type actual must implement type formal: actual=" +
 				actual.String() + " formal=" + formal.String())
 		}
-	}
-	for _, v := range u0.u_args {
-		v.Ok(ds, delta)
 	}
 }
 
@@ -255,14 +237,14 @@ func (u TNamed) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
-func (u TNamed) Underlying(ds []Decl) Type { // TODO checkar a cena de fazer TSubs logo no underlying
+func (u TNamed) Underlying(ds []Decl) Type {
 	decl := getTDecl(ds, u.t_name)
 	under := decl.GetSourceType().Underlying(ds)
 	// the underlying type itself may have type variables, as in e.g.
 	// type S[T any] struct { x T }
 	//  -> the underlying of S[int] is struct { x int }, hence the TSubs
-	subs := MakeTSubs(decl.Psi, u.u_args)
-	return under.TSubs(subs)
+	subs := MakeEtaOpen(decl.Psi, u.u_args) // EtaOpen <-> Eta (may be closed or not, we don't know)
+	return under.SubsEtaOpen(subs)
 }
 
 /******************************************************************************/
@@ -278,15 +260,11 @@ var _ Type = TPrimitive{}
 func (t TPrimitive) Tag() Tag        { return t.tag }
 func (t TPrimitive) Undefined() bool { return t.undefined }
 
-func (t TPrimitive) TSubs(subs map[TParam]Type) Type {
-	return t
-}
-
-func (t TPrimitive) SubsEta(eta Eta) GroundType {
-	return t
-}
-
 func (t TPrimitive) SubsEtaOpen(eta EtaOpen) Type {
+	return t
+}
+
+func (t TPrimitive) SubsEtaClosed(eta EtaClosed) GroundType {
 	return t
 }
 
@@ -380,27 +358,18 @@ var _ Type = STypeLit{}
 
 func (s STypeLit) GetFieldDecls() []FieldDecl { return s.fDecls }
 
-func (s STypeLit) TSubs(subs map[TParam]Type) Type {
-	fds := make([]FieldDecl, len(s.fDecls))
-	for i, fd := range s.fDecls {
-		fds[i] = fd.TSubs(subs)
-	}
-	return STypeLit{fds}
-}
-
-func (s STypeLit) SubsEta(eta Eta) GroundType {
-	//fds := make([]FieldDecl, len(s.fDecls))
-	//for i, fd := range s.fDecls {
-	//	fds[i] = fd.SubsEta(eta)
-	//}
-	//return STypeLit{fds}
-	panic("STypeLit.SubsEta") // TODO how to return a TNamed?? Maybe should return some kind of GroundType ??
-}
-
 func (s STypeLit) SubsEtaOpen(eta EtaOpen) Type {
 	fds := make([]FieldDecl, len(s.fDecls))
 	for i, fd := range s.fDecls {
 		fds[i] = fd.SubsEtaOpen(eta)
+	}
+	return STypeLit{fds}
+}
+
+func (s STypeLit) SubsEtaClosed(eta EtaClosed) GroundType {
+	fds := make([]FieldDecl, len(s.fDecls))
+	for i, fd := range s.fDecls {
+		fds[i] = fd.SubsEtaClosed(eta)
 	}
 	return STypeLit{fds}
 }
@@ -471,15 +440,12 @@ var _ FGGNode = FieldDecl{}
 func (fd FieldDecl) GetName() Name { return fd.field }
 func (fd FieldDecl) GetType() Type { return fd.u }
 
-// TODO these 3 look too similar -- possible refactor?
-func (fd FieldDecl) TSubs(subs map[TParam]Type) FieldDecl {
-	return FieldDecl{fd.field, fd.u.TSubs(subs)}
-}
-func (fd FieldDecl) SubsEta(eta Eta) FieldDecl {
-	return FieldDecl{fd.field, fd.u.SubsEta(eta)}
-}
 func (fd FieldDecl) SubsEtaOpen(eta EtaOpen) FieldDecl {
 	return FieldDecl{fd.field, fd.u.SubsEtaOpen(eta)}
+}
+
+func (fd FieldDecl) SubsEtaClosed(eta EtaClosed) FieldDecl {
+	return FieldDecl{fd.field, fd.u.SubsEtaClosed(eta)}
 }
 
 func (fd FieldDecl) Equals(other FieldDecl) bool {
@@ -501,36 +467,33 @@ var _ Type = ITypeLit{}
 
 func (i ITypeLit) GetSpecs() []Spec { return i.specs }
 
-func (i ITypeLit) TSubs(subs map[TParam]Type) Type {
+func (i ITypeLit) SubsEtaClosed(eta EtaClosed) GroundType {
 	specs := make([]Spec, len(i.specs))
 	for i, spec := range i.specs {
-		switch spec := spec.(type) {
+		switch s := spec.(type) {
 		case Sig:
-			specs[i] = spec.TSubs(subs)
+			// eta won't contain mappings for the type vars of this Sig,
+			// hence it isn't really 'closed' in this context
+			subs := eta.ToEtaOpen()
+			specs[i] = s.SubsEtaOpen(subs)
 		case TNamed:
-			specs[i] = spec.TSubs(subs).(TNamed)
+			specs[i] = s.SubsEtaClosed(eta).(TNamed)
 		}
 	}
 	return ITypeLit{specs}
 }
 
-func (i ITypeLit) SubsEta(eta Eta) GroundType {
-	panic("implement me")
-
-}
-
 func (i ITypeLit) SubsEtaOpen(eta EtaOpen) Type {
-	panic("implement me ITypeLit.SubsEtaOpen")
-	//specs := make([]Spec, len(i.specs))
-	//for i, spec := range i.specs {
-	//	switch spec := spec.(type) {
-	//	case Sig:
-	//		specs[i] = spec.SubsE(subs)
-	//	case TNamed:
-	//		specs[i] = spec.SubsEtaOpen(eta).(TNamed)
-	//	}
-	//}
-	//return ITypeLit{specs}
+	specs := make([]Spec, len(i.specs))
+	for i, spec := range i.specs {
+		switch s := spec.(type) {
+		case Sig:
+			specs[i] = s.SubsEtaOpen(eta)
+		case TNamed:
+			specs[i] = s.SubsEtaOpen(eta).(TNamed)
+		}
+	}
+	return ITypeLit{specs}
 }
 
 func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
