@@ -77,7 +77,8 @@ primName   : BOOL
            | STRING
            ;
 typeLit    : STRUCT '{' fieldDecls? '}'	            # StructTypeLit
-	       | INTERFACE '{' specs? '}'	            # InterfaceTypeLit
+//	       | INTERFACE '{' (typeList ';')? specs? '}'	    # InterfaceTypeLit
+	       | INTERFACE '{' typeList? specs? '}'	    # InterfaceTypeLit
 	       ;
 typeFormals: '(' TYPE typeFDecls? ')' ; // Refactored "(...)" into here
 typeFDecls : typeFDecl (',' typeFDecl)* ;
@@ -92,6 +93,7 @@ typeDecl   : TYPE id=NAME typeFormals typ ;
 methDecl   : FUNC '(' recv = NAME typn = NAME typeFormals ')' sig '{' RETURN expr '}' ;
 fieldDecls : fieldDecl (';' fieldDecl)*;
 fieldDecl  : field = NAME typ;
+typeList   : TYPE typs ;
 specs      : spec (';' spec)*;
 spec       : (sig | typ) ;
 sig        : meth = NAME typeFormals '(' params? ')' typ;

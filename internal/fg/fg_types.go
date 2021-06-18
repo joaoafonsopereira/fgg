@@ -3,16 +3,16 @@ package fg
 import (
 	"github.com/rhu1/fgg/internal/base"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
 /* Export */
 
-func NewTNamed(t Name) TNamed                        { return TNamed(t) }
-func NewTPrimitive(t Tag, undefined bool) TPrimitive { return TPrimitive{t, undefined} }
-func NewSTypeLit(fds []FieldDecl) STypeLit           { return STypeLit{fds} }
-func NewITypeLit(ss []Spec) ITypeLit                 { return ITypeLit{ss} }
+func NewTNamed(t Name) TNamed              { return TNamed(t) }
+func NewTPrimitive(t Tag) TPrimitive       { return TPrimitive{t, false} }
+func NewUndefTPrimitive(t Tag) TPrimitive  { return TPrimitive{t, true} }
+func NewSTypeLit(fds []FieldDecl) STypeLit { return STypeLit{fds} }
+func NewITypeLit(ss []Spec) ITypeLit       { return ITypeLit{ss} }
 
 /******************************************************************************/
 /* Named (defined) types */
@@ -96,14 +96,40 @@ type TPrimitive struct {
 
 var _ Type = TPrimitive{}
 
-func (t0 TPrimitive) Tag() Tag        { return t0.tag }
-func (t0 TPrimitive) Undefined() bool { return t0.undefined }
+func (t0 TPrimitive) Tag() Tag       { return t0.tag }
+func (t TPrimitive) Undefined() bool { return t.undefined }
 
-// Pre: t0.IsUndefined()
-func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
-	if !t0.Undefined() {
-		panic("FitsIn: t0 is not undefined")
+func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
+	t_fg := asFGType(t)
+
+	if t0.Undefined() {
+		return t0.canConvertTo(ds, t_fg)
 	}
+
+	switch t_fg := t_fg.(type) {
+	case TPrimitive:
+		return t0.Equals(t_fg)
+	case TNamed:
+		return isInterfaceType(ds, t_fg) && t0.Impls(ds, t_fg.Underlying(ds))
+	case ITypeLit:
+		return len(methods(ds, t_fg)) == 0 // or if t0 belongs to type list
+	default:
+		return false
+	}
+}
+
+func (t0 TPrimitive) canConvertTo(ds []Decl, t Type) bool {
+	switch under := t.Underlying(ds).(type) {
+	case TPrimitive:
+		return t0.fitsIn(under)
+	case ITypeLit:
+		return len(methods(ds, under)) == 0
+	default: // no type lists in fg interfaces (yet, at least)
+		return false
+	}
+}
+
+func (t0 TPrimitive) fitsIn(t TPrimitive) bool {
 	if t0.tag > t.tag {
 		return false
 	}
@@ -117,29 +143,7 @@ func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
 	case FLOAT32, FLOAT64:
 		return FLOAT32 <= t.tag && t.tag <= FLOAT64
 	default:
-		panic("FitsIn: t0 has unsupported type: " + t0.String())
-	}
-}
-
-func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
-	t_fg := asFGType(t)
-	switch t_fg := t_fg.(type) {
-	case TPrimitive:
-		if t0.Undefined() {
-			return t0.FitsIn(t_fg)
-		} else {
-			return t0.Equals(t_fg)
-		}
-	case TNamed:
-		if t0.Undefined() { // e.g. 1 'implements' MyInt
-			return t0.Impls(ds, t_fg.Underlying(ds))
-		} else {
-			return isInterfaceType(ds, t_fg) && t0.Impls(ds, t_fg.Underlying(ds))
-		}
-	case ITypeLit:
-		return len(methods(ds, t_fg)) == 0 // or if t0 belongs to type list
-	default:
-		return false
+		panic("FitsIn: t0 has unsupported type: " + t.String())
 	}
 }
 
@@ -156,14 +160,11 @@ func (t0 TPrimitive) Equals(t base.Type) bool {
 }
 
 func (t0 TPrimitive) String() string {
-	var b strings.Builder
-	b.WriteString("TPrimitive{")
-	b.WriteString("tag=")
-	b.WriteString(NameFromTag(t0.tag))
-	b.WriteString(", undefined=")
-	b.WriteString(strconv.FormatBool(t0.undefined))
-	b.WriteString("}")
-	return b.String()
+	undef := ""
+	if t0.undefined {
+		undef = "(undefined)"
+	}
+	return NameFromTag(t0.tag) + undef
 }
 
 func (t0 TPrimitive) Underlying(ds []Decl) Type {

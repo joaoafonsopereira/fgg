@@ -89,7 +89,7 @@ func monomType(fgg_type Type, eta EtaClosed, mu Mu, omega Omega) fg.Type {
 		subs := t.SubsEtaClosed(eta)
 		return monomType(subs, eta, nil, omega)
 	case TPrimitive:
-		return fg.NewTPrimitive(fg.Tag(t.tag), t.undefined) // t.undefined should always be false
+		return fg.NewTPrimitive(fg.Tag(t.tag))
 	case TNamed:
 		return monomTNamed(t, eta)
 	case STypeLit:

@@ -204,3 +204,137 @@ func Test200b(t *testing.T) {
 	testutils.EvalAndOkGood(t, prog, 2)
 	_ =  prog
 }
+
+
+/* Type lists */
+
+// testing primary ops over generic types
+func TestTLists001(t *testing.T) {
+	A := "type IConstr(type ) interface { type int32, int64 }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T IConstr())(x T) T { return x + x }"
+	e := "S(){}.add(int32)(5)"
+	//fggParseAndOkGood(t, A, S, Sm, e)
+	prog := fggParseAndOkMonomGood(t, A, S, Sm, e)
+	testutils.EvalAndOkGood(t, prog, 2)
+}
+
+// using MyInt to instantiate type list
+func TestTLists001b(t *testing.T) {
+	A := "type IConstr(type ) interface { type int32, int64 }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T IConstr())(x T) T { return x + x }"
+	MyInt := "type MyInt(type ) int32"
+	e := "S(){}.add(MyInt())(5)"
+	prog := fggParseAndOkMonomGood(t,  A, S, Sm, MyInt, e)
+	testutils.EvalAndOkGood(t, prog, 2)
+}
+
+// testing wrong instantiation: type doesn't belong to type list
+func TestTLists001c(t *testing.T) {
+	A := "type IConstr(type ) interface { type int32, int64 }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T IConstr())(x T) T { return x + x }"
+	MyFloat := "type MyFloat(type ) float32"
+	e := "S(){}.add(MyFloat())(5.5)"
+
+	//msg :=
+	fggParseAndOkBad(t, "", A, S, Sm, MyFloat, e)
+}
+
+// Interface with type list & methods
+func TestTLists002(t *testing.T) {
+	A := "type IConstr(type ) interface { type int32, int64 ; String(type )() string }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T IConstr())(x T) string { return x.String()() + \"b\" }"
+	MyInt := "type MyInt(type ) int32"
+	MyIntStr := "func (m MyInt(type )) String(type )() string { return \"myinttt\" }"
+	e := "S(){}.add(MyInt())(1)"
+	//fggParseAndOkGood(t, A, S, Sm, MyInt, MyIntStr, e)
+	prog := fggParseAndOkMonomGood(t, A, S, Sm, MyInt, MyIntStr, e)
+	testutils.EvalAndOkGood(t, prog, 3)
+}
+
+// Adding iface value and const (ok)
+func TestTLists003(t *testing.T) {
+	A := "type Numeric(type ) interface { type int32, int64, float32, float64 }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T Numeric())(x T) T { return x + 1 }"
+	Sm2 := "func (s S(type )) add2(type T Numeric())(x T) T { return 1 + x }" // just to test different order in typing
+	MyInt := "type MyInt(type ) int32"
+	e := "S(){}.add(MyInt())(4)"
+	//fggParseAndOkGood(t, A, S, Sm, MyInt, e)
+	prog := fggParseAndOkMonomGood(t, A, S, Sm, Sm2, MyInt, e)
+	testutils.EvalAndOkGood(t, prog, 2)
+}
+
+// Adding iface value and const (wrong -- string is not numeric)
+// -> cannot convert 1 (untyped int constant) to T
+func TestTLists003b(t *testing.T) {
+	A := "type NumericS(type ) interface { type int32, int64, float32, float64, string }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T NumericS())(x T) T { return x + 1 }"
+	MyInt := "type MyString(type ) string"
+	e := "S(){}.add(MyString())(\"a\")"
+
+	msg := "mismatched types T and int32(undefined)" // Constraint includes string; can't convert 1 to a string
+	fggParseAndOkBad(t, msg, A, S, Sm, MyInt, e)
+}
+
+// Adding iface value and int32, wrong todo why? -> mismatched types T and int32
+func TestTLists003c(t *testing.T) {
+	A := "type NumericS(type ) interface { type int32, int64, float32, float64, string }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T NumericS())(x T, y int32) T { return x + y }"
+	MyInt := "type MyInt(type ) int32"
+	e := "S(){}.add(MyInt())(4)"
+
+	msg := "mismatched types T and int32"
+	fggParseAndOkBad(t, msg, A, S, Sm, MyInt, e) // this is the one I want
+
+}
+
+// Adding 2 type params with the same bounds (bad)
+func TestTLists004(t *testing.T) {
+	A := "type NumericS(type ) interface { type int32, int64, float32, float64 }"
+	S := "type S(type ) struct {}"
+	Sm := "func (s S(type )) add(type T NumericS(), T2 NumericS())(x T, y T2) bool { return (x + y) > 0 }"
+	MyInt := "type MyInt(type ) int32"
+	e := "S(){}.add(MyInt(), MyInt())(4, 5)"
+
+	fggParseAndOkBad(t, "mismatched types T and T2", A, S, Sm, MyInt, e)
+}
+
+// Types with methods in type lists: method can't be called unless
+// it is explicitly specified in the constraint -- even though
+// all the listed types have that method.
+// Cf. https://go.googlesource.com/proposal/+/refs/heads/master/design/43651-type-parameters.md#types-with-methods-in-type-lists
+func TestTLists005(t *testing.T) {
+	MyInt := "type MyInt(type ) int32"
+	MyIntS := "func (m MyInt(type )) String(type )() string { return \"myint\" }"
+	MyFloat := "type MyFloat(type ) float32"
+	MyFloatS := "func (m MyFloat(type )) String(type )() string { return \"myfloat\" }"
+
+	MyIorF := "type MyIntOrFloat(type ) interface { type MyInt(), MyFloat() }"
+	S := "type S(type ) struct {}"
+	ToString := "func (s S(type )) ToString(type T MyIntOrFloat())(v T) string { return v.String()() }"
+	//e := "S(){}.ToString(MyInt())(1)"
+	e := "S(){}" // the error must be caught at MethDecl.Ok
+
+	msg := "Method not found: String in T" // or smthing like that
+	fggParseAndOkBad(t, msg, S, MyInt, MyIntS, MyFloat, MyFloatS, MyIorF, ToString, e)
+}
+
+func TestTLists005b(t *testing.T) {
+	MyInt := "type MyInt(type ) int32"
+	MyIntS := "func (m MyInt(type )) String(type )() string { return \"myint\" }"
+	MyFloat := "type MyFloat(type ) float32"
+	MyFloatS := "func (m MyFloat(type )) String(type )() string { return \"myfloat\" }"
+
+	MyIorF := "type MyIntOrFloatStringer(type ) interface { type MyInt(), MyFloat(); String(type )() string }"
+	S := "type S(type ) struct {}"
+	ToString := "func (s S(type )) ToString(type T MyIntOrFloatStringer())(v T) string { return v.String()() }"
+	e := "S(){}.ToString(MyInt())(1)"
+	fggParseAndOkGood(t, S, MyInt, MyIntS, MyFloat, MyFloatS, MyIorF, ToString, e)
+}
+

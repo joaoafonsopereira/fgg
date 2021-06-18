@@ -140,12 +140,25 @@ func (b BinaryOperation) Eval(ds []Decl) (FGGExpr, string) {
 func (b BinaryOperation) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
 	ltype, ltree := b.left.Typing(ds, delta, gamma, allowStupid)
 	rtype, rtree := b.right.Typing(ds, delta, gamma, allowStupid)
+	newTree := NewBinaryOp(ltree, rtree, b.op)
 
-	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
-	// any of the Impls tests below
+	var pred PrimtPredicate
 	switch b.op {
 	case ADD:
-		if !isNumeric(ds, ltype) && !isString(ds, ltype) {
+		pred = Or(isNumeric, isString)
+	case SUB:
+		pred = isNumeric
+	case LAND, LOR:
+		pred = isBool
+	}
+	if ok := evalPrimtPredicate(ds, delta, pred, ltype); !ok {
+		panic("operator " + string(b.op) + " not defined for type: " + ltype.String())
+	}
+	// also check if op defined for rtype?
+	if ok := evalPrimtPredicate(ds, delta, pred, rtype); !ok {
+		panic("operator " + string(b.op) + " not defined for type: " + rtype.String())
+	}
+
 			panic("Add doesn't support type: " + ltype.String())
 		}
 	case SUB:
@@ -159,14 +172,13 @@ func (b BinaryOperation) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid
 		}
 	}
 
-	newTree := NewBinaryOp(ltree, rtree, b.op)
 
 	// verify that ltype and rtype are compatible;
 	// if they are, return the most general type
-	if ltype.Impls(ds, rtype) {
+	if ltype.ImplsDelta(ds, delta, rtype) {
 		return rtype, newTree
 	}
-	if rtype.Impls(ds, ltype) {
+	if rtype.ImplsDelta(ds, delta, ltype) {
 		return ltype, newTree
 	}
 	panic("mismatched types " + ltype.String() + " and " + rtype.String())
@@ -203,10 +215,15 @@ func (c Comparison) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool
 
 	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
 	// the Impls tests below
-	if !isComparable(ds, ltype) {
-		panic("GT/LT doesn't support type: " + ltype.String())
+	//if !isComparable(ds, ltype) {
+	//	panic("GT/LT doesn't support type: " + ltype.String())
+	//}
+	if ok := evalPrimtPredicate(ds, delta, isComparable, ltype); !ok {
+		panic("operator " + string(c.op) + " not defined for type: " + ltype.String())
 	}
-	if !ltype.Impls(ds, rtype) && !rtype.Impls(ds, ltype) {
+
+
+	if !ltype.ImplsDelta(ds, delta, rtype) && !rtype.ImplsDelta(ds, delta, ltype) {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())
 	}
 

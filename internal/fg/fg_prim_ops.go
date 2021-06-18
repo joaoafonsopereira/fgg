@@ -136,23 +136,23 @@ func (b BinaryOperation) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type,
 	ltype, ltree := b.left.Typing(ds, gamma, allowStupid)
 	rtype, rtree := b.right.Typing(ds, gamma, allowStupid)
 
-	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
-	// any of the Impls tests below
+	var pred PrimtPredicate
 	switch b.op {
 	case ADD:
-		if !isNumeric(ds, ltype) && !isString(ds, ltype) {
-			panic("Add doesn't support type: " + ltype.String())
-		}
+		pred = Or(isNumeric, isString)
 	case SUB:
-		if !isNumeric(ds, ltype) {
-			panic("Sub doesn't support type: " + ltype.String())
-		}
+		pred = isNumeric
 	case LAND, LOR:
-		if !isBoolean(ds, ltype) {
-			// TODO replace by string(b.op)
-			panic("LAND/LOR doesn't support type: " + ltype.String())
-		}
+		pred = isBool
 	}
+	if ok := evalPrimtPredicate(ds, pred, ltype); !ok {
+		panic("operator " + string(b.op) + " not defined for type: " + ltype.String())
+	}
+	// also check if op defined for rtype?
+	if ok := evalPrimtPredicate(ds, pred, rtype); !ok {
+		panic("operator " + string(b.op) + " not defined for type: " + rtype.String())
+	}
+
 
 	newTree := NewBinaryOp(ltree, rtree, b.op)
 
@@ -196,11 +196,13 @@ func (c Comparison) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGEx
 	ltype, ltree := c.left.Typing(ds, gamma, allowStupid)
 	rtype, rtree := c.right.Typing(ds, gamma, allowStupid)
 
-	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
-	// the Impls tests below
-	if !isComparable(ds, ltype) {
-		panic("GT/LT doesn't support type: " + ltype.String())
+	if ok := evalPrimtPredicate(ds, isComparable, ltype); !ok {
+		panic("operator " + string(c.op) + " not defined for type: " + ltype.String())
 	}
+	if ok := evalPrimtPredicate(ds, isComparable, rtype); !ok {
+		panic("operator " + string(c.op) + " not defined for type: " + ltype.String())
+	}
+
 	if !ltype.Impls(ds, rtype) && !rtype.Impls(ds, ltype) {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())
 	}
