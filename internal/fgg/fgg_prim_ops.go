@@ -159,20 +159,6 @@ func (b BinaryOperation) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid
 		panic("operator " + string(b.op) + " not defined for type: " + rtype.String())
 	}
 
-			panic("Add doesn't support type: " + ltype.String())
-		}
-	case SUB:
-		if !isNumeric(ds, ltype) {
-			panic("Sub doesn't support type: " + ltype.String())
-		}
-	case LAND, LOR:
-		if !isBoolean(ds, ltype) {
-			// TODO replace by string(b.op)
-			panic("LAND/LOR doesn't support type: " + ltype.String())
-		}
-	}
-
-
 	// verify that ltype and rtype are compatible;
 	// if they are, return the most general type
 	if ltype.ImplsDelta(ds, delta, rtype) {
@@ -213,15 +199,12 @@ func (c Comparison) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool
 	ltype, ltree := c.left.Typing(ds, delta, gamma, allowStupid)
 	rtype, rtree := c.right.Typing(ds, delta, gamma, allowStupid)
 
-	// enough to verify ltype -- if rtype is a 'wrong' type, it will not pass
-	// the Impls tests below
-	//if !isComparable(ds, ltype) {
-	//	panic("GT/LT doesn't support type: " + ltype.String())
-	//}
 	if ok := evalPrimtPredicate(ds, delta, isComparable, ltype); !ok {
 		panic("operator " + string(c.op) + " not defined for type: " + ltype.String())
 	}
-
+	if ok := evalPrimtPredicate(ds, delta, isComparable, rtype); !ok {
+		panic("operator " + string(c.op) + " not defined for type: " + rtype.String())
+	}
 
 	if !ltype.ImplsDelta(ds, delta, rtype) && !rtype.ImplsDelta(ds, delta, ltype) {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())

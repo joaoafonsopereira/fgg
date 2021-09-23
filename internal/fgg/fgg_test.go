@@ -316,7 +316,7 @@ func Test014(t *testing.T) {
 	B := "type B(type a Any()) struct { f a }"
 	Bm := "func (x0 B(type a Any())) m(type b Any())() b { return A(){} }"
 	e := "B(A()){A(){}}.m(B(A()))(B(A()){A(){}}).f" // Eval would break type preservation, see TestEval001
-	fggParseAndOkBad(t, Any, A, B, Bm, e)
+	fggParseAndOkBad(t, "", Any, A, B, Bm, e)
 }
 
 // testing sigAlphaEquals
@@ -325,22 +325,25 @@ func Test015(t *testing.T) {
 	A := "type A(type ) interface { m(type a Any())(x a) Any() }"
 	B := "type B(type ) interface { m(type b Any())(x b) Any() }"
 	C := "type C(type ) struct {}"
-	Cm := "func (x0 C(type )) m(type b Any())(x b) Any() { return x0 }"
+	Cm := "func (x0 C(type )) m(type b Any())(x b) Any() { return x0 }" // C <: A && C <: B
 	D := "type D(type ) struct {}"
-	Dm := "func (x0 D(type )) foo(type )(x A()) Any() { return x0 }"
+	//Dm := "func (x0 D(type )) foo(type )(x A()) Any() { return x0 }"
+	Dm := "func (x0 D(type )) foo(type )(x A()) B() { return x }"
 	e := "D(){}.foo()(C(){})"
-	fggParseAndOkBad(t, Any, A, B, C, Cm, D, Dm, e)
+	fggParseAndOkGood(t, Any, A, B, C, Cm, D, Dm, e)
 }
 
 // testing covariant receiver bounds (MDecl.OK) -- cf. map.fgg (memberBr)
 func Test016(t *testing.T) {
-	Any := "Any(type ) interface {}"
+	Any := "type Any(type ) interface {}"
 	A := "type A(type a Any()) interface { m(type )(x a) Any() }" // param must occur in a meth sig
 	B := "type B(type a A(a)) struct {}"                          // must have recursive param
 	Bm := "func (x0 B(type b A(b))) m(type )(x b) Any() { return x0 }"
 	D := "type D(type ) struct{}"
 	e := "D(){}"
-	fggParseAndOkBad(t, Any, A, B, Bm, D, e)
+	fggParseAndOkGood(t, Any, A, B, Bm, D, e)
+	//    fggParseAndOkBad(t, "", Any, A, B, Bm, D, e)
+	// vs fggParseAndOkBad(t, Any, A, B, Bm, D, e) -- Any is consumed as the expected msg
 }
 
 func Test017(t *testing.T) {
@@ -350,7 +353,7 @@ func Test017(t *testing.T) {
 	Afoo := "func (x0 A(type a I())) foo(type )() Any() { return x0 }"
 	D := "type D(type ) struct { }"
 	e := "A(D()){}.foo()()"
-	fggParseAndOkBad(t, Any, I, A, Afoo, D, e)
+	fggParseAndOkBad(t, "", Any, I, A, Afoo, D, e)
 }
 
 func Test017b(t *testing.T) {

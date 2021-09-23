@@ -170,33 +170,26 @@ func getMethDecl(ds []Decl, recv Name, m Name) MethDecl {
 }
 
 // !!! Sig in FGG includes ~a and ~x, which naively breaks "impls"
-func sigAlphaEquals(g0 Sig, g Sig) bool {
-	if len(g0.Psi.tFormals) != len(g.Psi.tFormals) || len(g0.pDecls) != len(g.pDecls) {
+func sigAlphaEquals(g0 Sig, g1 Sig) bool {
+	if len(g0.Psi.tFormals) != len(g1.Psi.tFormals) || len(g0.pDecls) != len(g1.pDecls) {
 		return false
 	}
 	subs0 := makeParamIndexSubs(g0.Psi)
-	subs := makeParamIndexSubs(g.Psi)
-	for i := 0; i < len(g0.Psi.tFormals); i++ {
-		if !g0.Psi.tFormals[i].u_I.SubsEtaOpen(subs0).
-			Equals(g.Psi.tFormals[i].u_I.SubsEtaOpen(subs)) {
-			//fmt.Println("z:")
+	subs1 := makeParamIndexSubs(g1.Psi)
+	sig0 := g0.SubsEtaOpen(subs0)
+	sig1 := g1.SubsEtaOpen(subs1)
+
+	for i := 0; i < len(sig0.Psi.tFormals); i++ {
+		if !sig0.Psi.tFormals[i].u_I.Equals(sig1.Psi.tFormals[i].u_I) {
 			return false
 		}
 	}
-	for i := 0; i < len(g0.pDecls); i++ {
-		if !g0.pDecls[i].u.SubsEtaOpen(subs0).Equals(g.pDecls[i].u.SubsEtaOpen(subs)) {
-			/*fmt.Println("w1: ", g0.pDecls[i].u, g0.pDecls[i].u.TSubs(subs0))
-			fmt.Println("w2: ", g.pDecls[i].u, g.pDecls[i].u.TSubs(subs))
-			fmt.Println("y:")*/
+	for i := 0; i < len(sig0.pDecls); i++ {
+		if !sig0.pDecls[i].u.Equals(sig1.pDecls[i].u) {
 			return false
 		}
 	}
-	/*fmt.Println("1:", g0)
-	fmt.Println("2:", g)
-	fmt.Println("3:", g0.meth == g.meth, g0.u_ret.Equals(g.u_ret))
-	fmt.Println("4:", g0.u_ret.TSubs(subs0).Equals(g.u_ret.TSubs(subs)))*/
-	return g0.meth == g.meth &&
-		g0.u_ret.SubsEtaOpen(subs0).Equals(g.u_ret.SubsEtaOpen(subs))
+	return sig0.meth == sig1.meth && sig0.u_ret.Equals(sig1.u_ret)
 }
 
 // CHECKME: Used by sigAlphaEquals, and MDecl.OK (for covariant receiver bounds)

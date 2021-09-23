@@ -601,12 +601,13 @@ func (i ITypeLit) Equals(t base.Type) bool {
 	}
 
 	// goal: methodSet(i) == methodSet(other), regardless of order
-	// > this version is still sensible to order
+	// > this version is still sensible to order (todo)
 	for idx, spec := range i.specs {
 		if !specEquals(spec, other.specs[idx]) {
 			return false
 		}
 	}
+	// todo compare type lists?
 	return true
 }
 

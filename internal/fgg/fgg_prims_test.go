@@ -41,17 +41,15 @@ func Test019d(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) id(type )(i int32) int32 { return i }"
 	e := "A(){}.id()(2147483648)" // 1 << 31 (math.MaxInt32 + 1)
-	fggParseAndOkBad(t, A, Am, e)
+	fggParseAndOkBad(t, "", A, Am, e)
 }
 
-// can't mix different types
+// can't mix primitive types
 func Test020(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) add(type )(x float32, y float64) float64 { return x+y }"
 	e := "A(){}"
-	fggParseAndOkBad(t, A, Am, e)
-	//prog := fgParseAndOkGood(t, A, Am, e)
-	//testutils.EvalAndOkGood(t, prog, 2)
+	fggParseAndOkBad(t, "", A, Am, e)
 }
 
 // edge case - number of the form 'x.0' can either be int or float
@@ -75,7 +73,7 @@ func Test021c(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) id(type )(i int32) int32 { return i }"
 	e := "A(){}.id()(1 + 41.1)"
-	fggParseAndOkBad(t, A, Am, e)
+	fggParseAndOkBad(t,"", A, Am, e)
 }
 
 // Comparisons and logical ops
@@ -83,8 +81,6 @@ func Test022(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) cmp(type )(x float64, y float64) bool { return x > y || (x < x && false) }"
 	e := "A(){}.cmp()(2, 4.2)"
-	//fgParseAndOkGood(t, A, Am, e)
-	//prog := fggParseAndOkGood(t, A, Am, e)
 	prog := fggParseAndOkMonomGood(t, A, Am, e)
 	testutils.EvalAndOkGood(t, prog, 3)
 }
@@ -179,7 +175,7 @@ func Test111(t *testing.T) {
 	SFoof := "func (s SFoo1(type )) id(type T Any())(x T) T { return x }"
 	e := "A(){SFoo1(){}}.x.id(int32)(1)"
 	prog := fggParseAndOkMonomGood(t, Any, A, SFoo, SFoof, e)
-	testutils.EvalAndOkGood(t, prog, 3)
+	testutils.EvalAndOkGood(t, prog, 2)
 	_ = prog
 }
 // Testing cases where the only instantiation of a generic type

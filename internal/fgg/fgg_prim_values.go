@@ -99,6 +99,24 @@ func ConvertLitNode(lit PrimitiveLiteral, decldType Type) PrimtValue {
 	panic("Literal: " + lit.String() + " can't assume type: " + decldType.String())
 }
 
+func valueFromLiteral(lit PrimitiveLiteral, decldType TPrimitive) PrimtValue {
+	switch decldType.Tag() {
+	case BOOL:
+		return makeBoolVal(lit)
+	case INT32:
+		return makeInt32Val(lit)
+	case INT64:
+		return makeInt64Val(lit)
+	case FLOAT32:
+		return makeFloat32Val(lit)
+	case FLOAT64:
+		return makeFloat64Val(lit)
+	case STRING:
+		return makeStringVal(lit)
+	}
+	panic("Unexpected declared type for " + lit.String() + ": " + decldType.String())
+}
+
 /******************************************************************************/
 /* PrimtValue - base interface for primitive values */
 
@@ -347,26 +365,6 @@ func maxTag(t1, t2 Tag) Tag {
 	return t2
 }
 
-/* valueFromLiteral */
-
-func valueFromLiteral(lit PrimitiveLiteral, decldType TPrimitive) PrimtValue {
-	switch decldType.Tag() {
-	case BOOL:
-		return makeBoolVal(lit)
-	case INT32:
-		return makeInt32Val(lit)
-	case INT64:
-		return makeInt64Val(lit)
-	case FLOAT32:
-		return makeFloat32Val(lit)
-	case FLOAT64:
-		return makeFloat64Val(lit)
-	case STRING:
-		return makeStringVal(lit)
-	}
-	panic("Unexpected declared type for " + lit.String() + ": " + decldType.String())
-}
-
 /* Accessors -- return underlying value of a FGGExpr */
 
 func makeBoolVal(expr FGGExpr) BoolVal {
@@ -453,6 +451,19 @@ func makeNamedPrimtLiteral(expr FGGExpr, typ TNamed) NamedPrimitiveLiteral {
 
 type PrimtPredicate func(TPrimitive) bool
 
+func Or(pred1, pred2 PrimtPredicate) PrimtPredicate {
+	return func(t_P TPrimitive) bool { return pred1(t_P) || pred2(t_P) }
+}
+
+var (
+	isBool       = func(t_P TPrimitive) bool { return t_P.Tag() == BOOL }
+	isString     = func(t_P TPrimitive) bool { return t_P.Tag() == STRING }
+	isInt        = func(t_P TPrimitive) bool { return t_P.Tag() == INT32 || t_P.Tag() == INT64 }
+	isFloat      = func(t_P TPrimitive) bool { return t_P.Tag() == FLOAT32 || t_P.Tag() == FLOAT64 }
+	isNumeric    = Or(isInt, isFloat)
+	isComparable = func(_ TPrimitive) bool { return true } // enough to be a TPrimitive (underlying) ??
+)
+
 // Verifies if the type u satisfies the predicate.
 // If the type u is an interface type with a type list,
 // verifies that each type in the list satisfies the predicate.
@@ -476,24 +487,6 @@ func evalPrimtPredicate(ds []Decl, delta Delta, pred PrimtPredicate, u Type) boo
 	}
 	return false
 }
-
-func Or(pred1, pred2 PrimtPredicate) PrimtPredicate {
-	return func(t_P TPrimitive) bool { return pred1(t_P) || pred2(t_P) }
-}
-
-
-var (
-	isBool       = func(t_P TPrimitive) bool { return t_P.Tag() == BOOL }
-	isString     = func(t_P TPrimitive) bool { return t_P.Tag() == STRING }
-	isInt        = func(t_P TPrimitive) bool { return t_P.Tag() == INT32 || t_P.Tag() == INT64 }
-	isFloat      = func(t_P TPrimitive) bool { return t_P.Tag() == FLOAT32 || t_P.Tag() == FLOAT64 }
-	isNumeric    = Or(isInt, isFloat)
-	isComparable = func(_ TPrimitive) bool { return true } // enough to be a TPrimitive (underlying) ??
-	//isNumeric PrimtPredicate = func(t_P TPrimitive) bool {
-	//	tag := t_P.Tag()
-	//	return tag == INT32 || tag == INT64 || tag == FLOAT32 || tag == FLOAT64
-	//}
-)
 
 /* Strings */
 
