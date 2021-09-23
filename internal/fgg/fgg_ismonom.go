@@ -438,241 +438,241 @@ func auxE2Open(ds []Decl, omega Nomega) bool {
  * Deprecated: old CFG-based test
  */
 
-type RecvMethPair struct {
-	t_recv Name // Pre: t_S
-	m      Name // TODO rename
-}
-
-func (x0 RecvMethPair) equals(x RecvMethPair) bool {
-	return x0.t_recv == x.t_recv && x0.m == x.m
-}
-
-type cTypeArgs struct {
-	psi_recv SmallPsi
-	psi_meth SmallPsi
-}
-
-func (x0 cTypeArgs) equals(x cTypeArgs) bool {
-	return x0.psi_recv.Equals(x.psi_recv) && x0.psi_meth.Equals(x.psi_meth)
-}
-
-// Static call graph, agnostic of specific type args (cf. MethInstan)
-// N.B. nodes are for struct types
-type cgraph struct {
-	edges map[RecvMethPair]map[RecvMethPair]([]cTypeArgs)
-}
-
-func (x0 cgraph) String() string {
-	var b strings.Builder
-	for k, v := range x0.edges {
-		b.WriteString(k.t_recv)
-		b.WriteString(".")
-		b.WriteString(k.m)
-		b.WriteString(": ")
-		b.WriteString(fmt.Sprintf("%v", v))
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-// CFG-based occurs check -- needs method set unification ("open" impls)
-// CHECKME: generally, covariant receiver bounds specialisation
-func IsMonomOK_CFG(p FGGProgram) bool {
-	ds := p.GetDecls()
-	graph := cgraph{make(map[RecvMethPair]map[RecvMethPair]([]cTypeArgs))}
-	for _, v := range ds {
-		if md, ok := v.(MethDecl); ok {
-			buildGraph(ds, md, graph)
-		}
-	}
-	//buildGraphExpr(ds, make(Delta), make(Gamma), ...)  // visit main unnecessary -- CHECKME: all type instans seen?
-	//fmt.Println("111:\n", graph.String(), "---")
-	cycles := make(map[string]cycle)
-	findCycles(graph, cycles)
-	/*for _, v := range cycles {
-		fmt.Println("aaa:", v)
-	}*/
-	for _, v := range cycles {
-		//fmt.Println("bbb:", v)
-		if isNomonoCycle(ds, graph, v) {
-			return false
-		}
-		return true
-	}
-	return true
-}
-
-// Occurs check -- N.B. conservative w.r.t. whether type params actually used
-func isNomonoCycle(ds []Decl, graph cgraph, c cycle) bool {
-	for _, tArgs := range graph.edges[c[0]][c[1]] {
-		if isNomonoTypeArgs(tArgs) || isNomonoCycleAux(ds, graph, c, tArgs, 1) {
-			return true
-		}
-	}
-	return false
-}
-
-func isNomonoTypeArgs(tArgs cTypeArgs) bool {
-	for _, v := range tArgs.psi_recv {
-		if containsNestedTParam(v) {
-			return true
-		}
-	}
-	for _, v := range tArgs.psi_meth {
-		if containsNestedTParam(v) {
-			return true
-		}
-	}
-	return false
-}
-
-func isNomonoCycleAux(ds []Decl, graph cgraph, c cycle, tArgs cTypeArgs, i int) bool {
-	if i >= (len(c) - 1) {
-		return false
-	}
-	next := c[i]
-	md := getMethDecl(ds, next.t_recv, next.m)
-	subs := make(Delta)
-	for i, v := range tArgs.psi_recv {
-		subs[md.Psi_recv.tFormals[i].name] = v
-	}
-	for i, v := range tArgs.psi_meth {
-		subs[md.Psi_meth.tFormals[i].name] = v
-	}
-
-	for _, v := range graph.edges[c[i]][c[i+1]] {
-		tArgs1 := cTypeArgs{v.psi_recv.TSubs(subs), v.psi_meth.TSubs(subs)}
-		if isNomonoTypeArgs(tArgs1) {
-			return true
-		}
-		isNomonoCycleAux(ds, graph, c, tArgs1, i+1)
-	}
-	return false
-}
-
-func containsNestedTParam(u Type) bool {
-	if cast, ok := u.(TNamed); ok {
-		for _, v := range cast.u_args {
-			if isOrContainsTParam(v) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-type cycle []RecvMethPair
-
-func (x0 cycle) toHash() string {
-	return fmt.Sprintf("%v", x0)
-}
-
-func findCycles(graph cgraph, cycles map[string]cycle) {
-	for k, _ := range graph.edges {
-		stack := []RecvMethPair{k}
-		findCyclesAux(graph, stack, cycles)
-	}
-}
-
-// DFS -- TODO: start from main more efficient? -- CHECKME: maybe more "correct", w.r.t. omega method discarding
-func findCyclesAux(graph cgraph, stack []RecvMethPair, cycles map[string]cycle) {
-	targets := graph.edges[stack[len(stack)-1]]
-	if targets == nil {
-		panic("Shouldn't get in here:")
-	}
-lab:
-	for next, _ := range targets {
-		stack1 := append(stack, next)
-		if stack1[0].equals(next) {
-			cycles[cycle(stack1).toHash()] = stack1
-			continue
-		}
-		for _, prev := range stack[1:] {
-			if prev.equals(next) {
-				continue lab
-			}
-		}
-		findCyclesAux(graph, stack1, cycles)
-	}
-}
-
-// "Flat" graph building -- calls not visited (i.e., `body` not used)
-// Output: mutates cgraph
-func buildGraph(ds []Decl, md MethDecl, graph cgraph) {
-	n := RecvMethPair{md.t_recv, md.name}
-	graph.edges[n] = make(map[RecvMethPair]([]cTypeArgs))
-	delta := md.Psi_meth.ToDelta() // recv params added below
-	gamma := make(Gamma)
-	psi := make(SmallPsi, len(md.Psi_recv.tFormals))
-	for i, v := range md.Psi_recv.tFormals {
-		delta[v.name] = v.u_I
-		psi[i] = v.name
-	}
-	gamma[md.x_recv] = TNamed{md.t_recv, psi}
-	for _, v := range md.pDecls { // TODO: factor out
-		gamma[v.name] = v.u
-	}
-	buildGraphExpr(ds, delta, gamma, n, md.e_body, graph)
-}
-
-// "Flat" graph building -- calls not visited (i.e., `body` not used)
-func buildGraphExpr(ds []Decl, delta Delta, gamma Gamma, curr RecvMethPair, e1 FGGExpr, graph cgraph) {
-	switch e := e1.(type) {
-	case Variable:
-	case StructLit:
-		for _, elem := range e.elems {
-			buildGraphExpr(ds, delta, gamma, curr, elem, graph)
-		}
-	case Select:
-		buildGraphExpr(ds, delta, gamma, curr, e.e_S, graph)
-	case Call:
-		buildGraphExpr(ds, delta, gamma, curr, e.e_recv, graph)
-		for _, arg := range e.args {
-			buildGraphExpr(ds, delta, gamma, curr, arg, graph)
-		}
-		u_recv, _ := e.e_recv.Typing(ds, delta, gamma, true)
-
-		if isStructType(ds, u_recv) { // u_recv is a TNamed struct
-			u_S := u_recv.(TNamed)
-			putTArgs(graph, curr, u_S, e.meth, e.t_args)
-
-		} else { // TNamed interface or TParam
-			u_I := u_recv // Or type param
-			if _, ok := u_I.(TParam); ok {
-				u_I = u_I.TSubs(delta) // CHECKME
-			}
-			//for _, v := range ds {
-			//	if d, ok := v.(STypeLit); ok {
-			//
-			//		// method set unification instead of basic impls? -- or using bounds (hat) sufficient?
-			//		u_S := TNamed{d.t_name, d.Psi.Hat()} // !!!
-			//		if u_S.ImplsDelta(ds, delta, u_I) {
-			//			putTArgs(graph, curr, u_S, e.meth, e.t_args)
-			//		}
-			//
-			//	}
-			//}
-		}
-	case Assert:
-		buildGraphExpr(ds, delta, gamma, curr, e.e_I, graph)
-	default:
-		panic("Unknown Expr kind: " + reflect.TypeOf(e1).String() + "\n\t" +
-			e1.String())
-	}
-}
-
-// u_recv is target u_S
-func putTArgs(graph cgraph, curr RecvMethPair, u_recv TNamed, meth Name, psi_meth SmallPsi) {
-	edges := graph.edges[curr]
-	/*if edges == nil {
-		edges = make(map[node]([]cTypeArgs))
-		graph.edges[curr] = edges
-	}*/
-	target := RecvMethPair{u_recv.t_name, meth}
-	tArgs := edges[target]
-	if tArgs == nil {
-		tArgs = []cTypeArgs{}
-	}
-	tArgs = append(tArgs, cTypeArgs{u_recv.u_args, psi_meth})
-	edges[target] = tArgs
-}
+//type RecvMethPair struct {
+//	t_recv Name // Pre: t_S
+//	m      Name // TODO rename
+//}
+//
+//func (x0 RecvMethPair) equals(x RecvMethPair) bool {
+//	return x0.t_recv == x.t_recv && x0.m == x.m
+//}
+//
+//type cTypeArgs struct {
+//	psi_recv SmallPsi
+//	psi_meth SmallPsi
+//}
+//
+//func (x0 cTypeArgs) equals(x cTypeArgs) bool {
+//	return x0.psi_recv.Equals(x.psi_recv) && x0.psi_meth.Equals(x.psi_meth)
+//}
+//
+//// Static call graph, agnostic of specific type args (cf. MethInstan)
+//// N.B. nodes are for struct types
+//type cgraph struct {
+//	edges map[RecvMethPair]map[RecvMethPair]([]cTypeArgs)
+//}
+//
+//func (x0 cgraph) String() string {
+//	var b strings.Builder
+//	for k, v := range x0.edges {
+//		b.WriteString(k.t_recv)
+//		b.WriteString(".")
+//		b.WriteString(k.m)
+//		b.WriteString(": ")
+//		b.WriteString(fmt.Sprintf("%v", v))
+//		b.WriteString("\n")
+//	}
+//	return b.String()
+//}
+//
+//// CFG-based occurs check -- needs method set unification ("open" impls)
+//// CHECKME: generally, covariant receiver bounds specialisation
+//func IsMonomOK_CFG(p FGGProgram) bool {
+//	ds := p.GetDecls()
+//	graph := cgraph{make(map[RecvMethPair]map[RecvMethPair]([]cTypeArgs))}
+//	for _, v := range ds {
+//		if md, ok := v.(MethDecl); ok {
+//			buildGraph(ds, md, graph)
+//		}
+//	}
+//	//buildGraphExpr(ds, make(Delta), make(Gamma), ...)  // visit main unnecessary -- CHECKME: all type instans seen?
+//	//fmt.Println("111:\n", graph.String(), "---")
+//	cycles := make(map[string]cycle)
+//	findCycles(graph, cycles)
+//	/*for _, v := range cycles {
+//		fmt.Println("aaa:", v)
+//	}*/
+//	for _, v := range cycles {
+//		//fmt.Println("bbb:", v)
+//		if isNomonoCycle(ds, graph, v) {
+//			return false
+//		}
+//		return true
+//	}
+//	return true
+//}
+//
+//// Occurs check -- N.B. conservative w.r.t. whether type params actually used
+//func isNomonoCycle(ds []Decl, graph cgraph, c cycle) bool {
+//	for _, tArgs := range graph.edges[c[0]][c[1]] {
+//		if isNomonoTypeArgs(tArgs) || isNomonoCycleAux(ds, graph, c, tArgs, 1) {
+//			return true
+//		}
+//	}
+//	return false
+//}
+//
+//func isNomonoTypeArgs(tArgs cTypeArgs) bool {
+//	for _, v := range tArgs.psi_recv {
+//		if containsNestedTParam(v) {
+//			return true
+//		}
+//	}
+//	for _, v := range tArgs.psi_meth {
+//		if containsNestedTParam(v) {
+//			return true
+//		}
+//	}
+//	return false
+//}
+//
+//func isNomonoCycleAux(ds []Decl, graph cgraph, c cycle, tArgs cTypeArgs, i int) bool {
+//	if i >= (len(c) - 1) {
+//		return false
+//	}
+//	next := c[i]
+//	md := getMethDecl(ds, next.t_recv, next.m)
+//	subs := make(Delta)
+//	for i, v := range tArgs.psi_recv {
+//		subs[md.Psi_recv.tFormals[i].name] = v
+//	}
+//	for i, v := range tArgs.psi_meth {
+//		subs[md.Psi_meth.tFormals[i].name] = v
+//	}
+//
+//	for _, v := range graph.edges[c[i]][c[i+1]] {
+//		tArgs1 := cTypeArgs{v.psi_recv.TSubs(subs), v.psi_meth.TSubs(subs)}
+//		if isNomonoTypeArgs(tArgs1) {
+//			return true
+//		}
+//		isNomonoCycleAux(ds, graph, c, tArgs1, i+1)
+//	}
+//	return false
+//}
+//
+//func containsNestedTParam(u Type) bool {
+//	if cast, ok := u.(TNamed); ok {
+//		for _, v := range cast.u_args {
+//			if isOrContainsTParam(v) {
+//				return true
+//			}
+//		}
+//	}
+//	return false
+//}
+//
+//type cycle []RecvMethPair
+//
+//func (x0 cycle) toHash() string {
+//	return fmt.Sprintf("%v", x0)
+//}
+//
+//func findCycles(graph cgraph, cycles map[string]cycle) {
+//	for k, _ := range graph.edges {
+//		stack := []RecvMethPair{k}
+//		findCyclesAux(graph, stack, cycles)
+//	}
+//}
+//
+//// DFS -- TODO: start from main more efficient? -- CHECKME: maybe more "correct", w.r.t. omega method discarding
+//func findCyclesAux(graph cgraph, stack []RecvMethPair, cycles map[string]cycle) {
+//	targets := graph.edges[stack[len(stack)-1]]
+//	if targets == nil {
+//		panic("Shouldn't get in here:")
+//	}
+//lab:
+//	for next, _ := range targets {
+//		stack1 := append(stack, next)
+//		if stack1[0].equals(next) {
+//			cycles[cycle(stack1).toHash()] = stack1
+//			continue
+//		}
+//		for _, prev := range stack[1:] {
+//			if prev.equals(next) {
+//				continue lab
+//			}
+//		}
+//		findCyclesAux(graph, stack1, cycles)
+//	}
+//}
+//
+//// "Flat" graph building -- calls not visited (i.e., `body` not used)
+//// Output: mutates cgraph
+//func buildGraph(ds []Decl, md MethDecl, graph cgraph) {
+//	n := RecvMethPair{md.t_recv, md.name}
+//	graph.edges[n] = make(map[RecvMethPair]([]cTypeArgs))
+//	delta := md.Psi_meth.ToDelta() // recv params added below
+//	gamma := make(Gamma)
+//	psi := make(SmallPsi, len(md.Psi_recv.tFormals))
+//	for i, v := range md.Psi_recv.tFormals {
+//		delta[v.name] = v.u_I
+//		psi[i] = v.name
+//	}
+//	gamma[md.x_recv] = TNamed{md.t_recv, psi}
+//	for _, v := range md.pDecls { // TODO: factor out
+//		gamma[v.name] = v.u
+//	}
+//	buildGraphExpr(ds, delta, gamma, n, md.e_body, graph)
+//}
+//
+//// "Flat" graph building -- calls not visited (i.e., `body` not used)
+//func buildGraphExpr(ds []Decl, delta Delta, gamma Gamma, curr RecvMethPair, e1 FGGExpr, graph cgraph) {
+//	switch e := e1.(type) {
+//	case Variable:
+//	case StructLit:
+//		for _, elem := range e.elems {
+//			buildGraphExpr(ds, delta, gamma, curr, elem, graph)
+//		}
+//	case Select:
+//		buildGraphExpr(ds, delta, gamma, curr, e.e_S, graph)
+//	case Call:
+//		buildGraphExpr(ds, delta, gamma, curr, e.e_recv, graph)
+//		for _, arg := range e.args {
+//			buildGraphExpr(ds, delta, gamma, curr, arg, graph)
+//		}
+//		u_recv, _ := e.e_recv.Typing(ds, delta, gamma, true)
+//
+//		if isStructType(ds, u_recv) { // u_recv is a TNamed struct
+//			u_S := u_recv.(TNamed)
+//			putTArgs(graph, curr, u_S, e.meth, e.t_args)
+//
+//		} else { // TNamed interface or TParam
+//			u_I := u_recv // Or type param
+//			if _, ok := u_I.(TParam); ok {
+//				u_I = u_I.TSubs(delta) // CHECKME
+//			}
+//			//for _, v := range ds {
+//			//	if d, ok := v.(STypeLit); ok {
+//			//
+//			//		// method set unification instead of basic impls? -- or using bounds (hat) sufficient?
+//			//		u_S := TNamed{d.t_name, d.Psi.Hat()} // !!!
+//			//		if u_S.ImplsDelta(ds, delta, u_I) {
+//			//			putTArgs(graph, curr, u_S, e.meth, e.t_args)
+//			//		}
+//			//
+//			//	}
+//			//}
+//		}
+//	case Assert:
+//		buildGraphExpr(ds, delta, gamma, curr, e.e_I, graph)
+//	default:
+//		panic("Unknown Expr kind: " + reflect.TypeOf(e1).String() + "\n\t" +
+//			e1.String())
+//	}
+//}
+//
+//// u_recv is target u_S
+//func putTArgs(graph cgraph, curr RecvMethPair, u_recv TNamed, meth Name, psi_meth SmallPsi) {
+//	edges := graph.edges[curr]
+//	/*if edges == nil {
+//		edges = make(map[node]([]cTypeArgs))
+//		graph.edges[curr] = edges
+//	}*/
+//	target := RecvMethPair{u_recv.t_name, meth}
+//	tArgs := edges[target]
+//	if tArgs == nil {
+//		tArgs = []cTypeArgs{}
+//	}
+//	tArgs = append(tArgs, cTypeArgs{u_recv.u_args, psi_meth})
+//	edges[target] = tArgs
+//}

@@ -99,6 +99,24 @@ func ConvertLitNode(lit PrimitiveLiteral, decldType Type) PrimtValue {
 	panic("Literal: " + lit.String() + " can't assume type: " + decldType.String())
 }
 
+func valueFromLiteral(lit PrimitiveLiteral, decldType TPrimitive) PrimtValue {
+	switch decldType.Tag() {
+	case BOOL:
+		return makeBoolVal(lit)
+	case INT32:
+		return makeInt32Val(lit)
+	case INT64:
+		return makeInt64Val(lit)
+	case FLOAT32:
+		return makeFloat32Val(lit)
+	case FLOAT64:
+		return makeFloat64Val(lit)
+	case STRING:
+		return makeStringVal(lit)
+	}
+	panic("Unexpected declared type for " + lit.String() + ": " + decldType.String())
+}
+
 /******************************************************************************/
 /* PrimtValue - base interface for primitive values */
 
@@ -147,7 +165,7 @@ func (x PrimitiveLiteral) Eval([]Decl) (FGGExpr, string) {
 }
 
 func (x PrimitiveLiteral) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) {
-	return TPrimitive{tag: x.tag, undefined: true}, x
+	return NewUndefTPrimitive(x.tag), x
 }
 
 func (x PrimitiveLiteral) IsValue() bool {
@@ -164,7 +182,7 @@ func (x PrimitiveLiteral) String() string {
 	case bool:
 		payload = strconv.FormatBool(p)
 	case string:
-		payload = p
+		payload = "\"" + p + "\""
 	case int64:
 		payload = strconv.FormatInt(p, 10)
 	case float64:
@@ -251,18 +269,12 @@ func (x Float32Val) Eval([]Decl) (FGGExpr, string) { panic("Cannot reduce: " + x
 func (x Float64Val) Eval([]Decl) (FGGExpr, string) { panic("Cannot reduce: " + x.String()) }
 func (x StringVal) Eval([]Decl) (FGGExpr, string)  { panic("Cannot reduce: " + x.String()) }
 
-func (x BoolVal) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)  { return TPrimitive{tag: BOOL}, x }
-func (x Int32Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) { return TPrimitive{tag: INT32}, x }
-func (x Int64Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) { return TPrimitive{tag: INT64}, x }
-func (x Float32Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) {
-	return TPrimitive{tag: FLOAT32}, x
-}
-func (x Float64Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) {
-	return TPrimitive{tag: FLOAT64}, x
-}
-func (x StringVal) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) {
-	return TPrimitive{tag: STRING}, x
-}
+func (x BoolVal) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)    { return TPrimitive{tag: BOOL}, x }
+func (x Int32Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)   { return TPrimitive{tag: INT32}, x }
+func (x Int64Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)   { return TPrimitive{tag: INT64}, x }
+func (x Float32Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) { return TPrimitive{tag: FLOAT32}, x }
+func (x Float64Val) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr) { return TPrimitive{tag: FLOAT64}, x }
+func (x StringVal) Typing([]Decl, Delta, Gamma, bool) (Type, FGGExpr)  { return TPrimitive{tag: STRING}, x }
 
 func (x BoolVal) IsValue() bool    { return true }
 func (x Int32Val) IsValue() bool   { return true }
@@ -353,24 +365,6 @@ func maxTag(t1, t2 Tag) Tag {
 	return t2
 }
 
-/* valueFromLiteral */
-
-func valueFromLiteral(lit PrimitiveLiteral, decldType TPrimitive) PrimtValue {
-	switch decldType.Tag() {
-	case INT32:
-		return makeInt32Val(lit)
-	case INT64:
-		return makeInt64Val(lit)
-	case FLOAT32:
-		return makeFloat32Val(lit)
-	case FLOAT64:
-		return makeFloat64Val(lit)
-	case STRING:
-		return makeStringVal(lit)
-	}
-	panic("Unexpected declared type for " + lit.String() + ": " + decldType.String())
-}
-
 /* Accessors -- return underlying value of a FGGExpr */
 
 func makeBoolVal(expr FGGExpr) BoolVal {
@@ -457,41 +451,41 @@ func makeNamedPrimtLiteral(expr FGGExpr, typ TNamed) NamedPrimitiveLiteral {
 
 type PrimtPredicate func(TPrimitive) bool
 
-func evalPrimtPredicate(ds []Decl, t Type, predicate PrimtPredicate) bool {
-	under := t.Underlying(ds)
-	if t_P, ok := under.(TPrimitive); ok {
-		return predicate(t_P)
+func Or(pred1, pred2 PrimtPredicate) PrimtPredicate {
+	return func(t_P TPrimitive) bool { return pred1(t_P) || pred2(t_P) }
+}
+
+var (
+	isBool       = func(t_P TPrimitive) bool { return t_P.Tag() == BOOL }
+	isString     = func(t_P TPrimitive) bool { return t_P.Tag() == STRING }
+	isInt        = func(t_P TPrimitive) bool { return t_P.Tag() == INT32 || t_P.Tag() == INT64 }
+	isFloat      = func(t_P TPrimitive) bool { return t_P.Tag() == FLOAT32 || t_P.Tag() == FLOAT64 }
+	isNumeric    = Or(isInt, isFloat)
+	isComparable = func(_ TPrimitive) bool { return true } // enough to be a TPrimitive (underlying) ??
+)
+
+// Verifies if the type u satisfies the predicate.
+// If the type u is an interface type with a type list,
+// verifies that each type in the list satisfies the predicate.
+func evalPrimtPredicate(ds []Decl, delta Delta, pred PrimtPredicate, u Type) bool {
+	switch under := u.Underlying(ds).(type) {
+	case TPrimitive:
+		return pred(under)
+	case TParam:
+		constr := bounds(delta, under)
+		return evalPrimtPredicate(ds, delta, pred, constr)
+	case ITypeLit:
+		// a constraint satisfies a PrimtPredicate if every (underlying) type
+		// in its type list satisfies the pred
+		if under.HasTList() {
+			res := true
+			for _, u2 := range under.GetTList(ds) {
+				res = evalPrimtPredicate(ds, delta, pred, u2) && res
+			}
+			return res
+		}
 	}
-	//else if t_I, ok := under.(ITypeLit); ok {
-	// test each type in type list
-	//}
 	return false
-}
-
-func isBoolean(ds []Decl, t Type) bool {
-	pred := func(t_P TPrimitive) bool { return t_P.Tag() == BOOL }
-	return evalPrimtPredicate(ds, t, pred)
-}
-
-// TODO maybe the predicates could be directly associated with each type, instead
-//  of enumerating all the matching types here
-func isNumeric(ds []Decl, t Type) bool {
-	pred := func(t_P TPrimitive) bool {
-		tag := t_P.Tag()
-		return tag == INT32 || tag == INT64 || tag == FLOAT32 || tag == FLOAT64
-	}
-	return evalPrimtPredicate(ds, t, pred)
-}
-
-func isString(ds []Decl, t Type) bool {
-	pred := func(t_P TPrimitive) bool { return t_P.Tag() == STRING }
-	return evalPrimtPredicate(ds, t, pred)
-}
-
-func isComparable(ds []Decl, t Type) bool {
-	// TODO just tests that t's underlying is a primitive
-	pred := func(_ TPrimitive) bool { return true }
-	return evalPrimtPredicate(ds, t, pred)
 }
 
 /* Strings */

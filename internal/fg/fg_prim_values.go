@@ -157,7 +157,7 @@ func (x PrimitiveLiteral) Eval([]Decl) (FGExpr, string) {
 }
 
 func (x PrimitiveLiteral) Typing([]Decl, Gamma, bool) (Type, FGExpr) {
-	return TPrimitive{tag: x.tag, undefined: true}, x
+	return NewUndefTPrimitive(x.tag), x
 }
 
 func (x PrimitiveLiteral) IsValue() bool {
@@ -174,7 +174,7 @@ func (x PrimitiveLiteral) String() string {
 	case bool:
 		payload = strconv.FormatBool(p)
 	case string:
-		payload = p
+		payload = "\"" + p + "\""
 	case int64:
 		payload = strconv.FormatInt(p, 10)
 	case float64:
@@ -453,7 +453,7 @@ func makeNamedPrimtLiteral(expr FGExpr, typ TNamed) NamedPrimitiveLiteral {
 
 type PrimtPredicate func(TPrimitive) bool
 
-func evalPrimtPredicate(ds []Decl, t Type, predicate PrimtPredicate) bool {
+func evalPrimtPredicate(ds []Decl, predicate PrimtPredicate, t Type) bool {
 	under := t.Underlying(ds)
 	if t_P, ok := under.(TPrimitive); ok {
 		return predicate(t_P)
@@ -464,31 +464,22 @@ func evalPrimtPredicate(ds []Decl, t Type, predicate PrimtPredicate) bool {
 	return false
 }
 
-func isBoolean(ds []Decl, t Type) bool {
-	pred := func(t_P TPrimitive) bool { return t_P.Tag() == BOOL }
-	return evalPrimtPredicate(ds, t, pred)
+func Or(pred1, pred2 PrimtPredicate) PrimtPredicate {
+	return func(t_P TPrimitive) bool { return pred1(t_P) || pred2(t_P) }
 }
 
-// TODO maybe the predicates could be directly associated with each type, instead
-//  of enumerating all the matching types here
-func isNumeric(ds []Decl, t Type) bool {
-	pred := func(t_P TPrimitive) bool {
-		tag := t_P.Tag()
-		return tag == INT32 || tag == INT64 || tag == FLOAT32 || tag == FLOAT64
-	}
-	return evalPrimtPredicate(ds, t, pred)
-}
-
-func isString(ds []Decl, t Type) bool {
-	pred := func(t_P TPrimitive) bool { return t_P.Tag() == STRING }
-	return evalPrimtPredicate(ds, t, pred)
-}
-
-func isComparable(ds []Decl, t Type) bool {
-	// TODO just tests that t's underlying is a primitive
-	pred := func(_ TPrimitive) bool { return true }
-	return evalPrimtPredicate(ds, t, pred)
-}
+var (
+	isBool       = func(t_P TPrimitive) bool { return t_P.Tag() == BOOL }
+	isString     = func(t_P TPrimitive) bool { return t_P.Tag() == STRING }
+	isInt        = func(t_P TPrimitive) bool { return t_P.Tag() == INT32 || t_P.Tag() == INT64 }
+	isFloat      = func(t_P TPrimitive) bool { return t_P.Tag() == FLOAT32 || t_P.Tag() == FLOAT64 }
+	isNumeric    = Or(isInt, isFloat)
+	isComparable = func(_ TPrimitive) bool { return true } // enough to be a TPrimitive (underlying) ??
+	//isNumeric PrimtPredicate = func(t_P TPrimitive) bool {
+	//	tag := t_P.Tag()
+	//	return tag == INT32 || tag == INT64 || tag == FLOAT32 || tag == FLOAT64
+	//}
+)
 
 /* Strings */
 

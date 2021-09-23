@@ -47,6 +47,24 @@ type Omega struct {
 	ms map[string]MethInstan
 }
 
+//func (w Omega) addTInst(u GroundType) bool {
+//	key := toKey_Wt(u)
+//	if _, ok := w.us[key]; ok {
+//		w.us[key] = u
+//		return true
+//	}
+//	return false
+//}
+//
+//func (w Omega) addMInst(m MethInstan) bool {
+//	key := toKey_Wm(m)
+//	if _, ok := w.ms[key]; ok {
+//		w.ms[key] = m
+//		return true
+//	}
+//	return false
+//}
+
 func (w Omega) clone() Omega {
 	us := make(map[string]GroundType)
 	ms := make(map[string]MethInstan)

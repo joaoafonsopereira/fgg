@@ -122,7 +122,7 @@ func (c *fg2fgg) convertITypeLit(i fg.ITypeLit) (ITypeLit, error) {
 			specs = append(specs, emb.(TNamed))
 		}
 	}
-	return ITypeLit{specs}, nil
+	return ITypeLit{specs, nil}, nil
 }
 
 func (c *fg2fgg) convertFieldDecl(fd fg.FieldDecl) (FieldDecl, error) {

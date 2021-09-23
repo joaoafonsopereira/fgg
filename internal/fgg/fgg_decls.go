@@ -397,7 +397,7 @@ func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type) {
 	}
 }
 
-/* Version with fromStruct "optimization" */
+/* Version with fromStruct "optimization" */ // TODO IS this version needed?
 //func checkCyclicTypeDecl(ds []Decl, decl TypeDecl, target Type, fromStruct bool) {
 //	switch target := target.(type) {
 //	case TParam, TPrimitive:

@@ -86,7 +86,7 @@ func (a *FGGAdaptor) ExitTypeName(ctx *parser.TypeNameContext) {
 
 func (a *FGGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
 	tag := fgg.TagFromName(ctx.GetName().GetText())
-	a.push(fgg.NewTPrimitive(tag, false))
+	a.push(fgg.NewTPrimitive(tag))
 }
 
 func (a *FGGAdaptor) ExitTypeLit_(ctx *parser.TypeLit_Context) {
@@ -99,8 +99,8 @@ func (a *FGGAdaptor) ExitTypeLit_(ctx *parser.TypeLit_Context) {
 // Children: 2=fieldDecls
 func (a *FGGAdaptor) ExitStructTypeLit(ctx *parser.StructTypeLitContext) {
 	fds := []fgg.FieldDecl{}
-	if ctx.GetChildCount() > 3 {
-		nfds := (ctx.GetChild(2).GetChildCount() + 1) / 2 // fieldDecl (';' fieldDecl)*
+	if ctx.FieldDecls() != nil {
+		nfds := (ctx.FieldDecls().GetChildCount() + 1) / 2 // fieldDecl (';' fieldDecl)*
 		fds = make([]fgg.FieldDecl, nfds)
 		for i := nfds - 1; i >= 0; i-- {
 			fd := a.pop().(fgg.FieldDecl)
@@ -113,15 +113,26 @@ func (a *FGGAdaptor) ExitStructTypeLit(ctx *parser.StructTypeLitContext) {
 // Cf. ExitStructTypeLit
 func (a *FGGAdaptor) ExitInterfaceTypeLit(ctx *parser.InterfaceTypeLitContext) {
 	specs := []fgg.Spec{}
-	if ctx.GetChildCount() > 3 {
-		nss := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., s ';' s ';' s
+	tlist := []fgg.Type{}
+	// first add specs and then type list (inverse order of syntax)
+	if ctx.Specs() != nil {
+		nss := (ctx.Specs().GetChildCount() + 1) / 2 // e.g., s ';' s ';' s
 		specs = make([]fgg.Spec, nss)
 		for i := nss - 1; i >= 0; i-- {
 			s := a.pop().(fgg.Spec)
 			specs[i] = s // Adding backwards
 		}
 	}
-	a.push(fgg.NewITypeLit(specs))
+	if ctx.TypeList() != nil {
+		// ctx.TypeList().Children: 0="type", 1=typs
+		typs := ctx.TypeList().GetChild(1)
+		nus := (typs.GetChildCount() + 1) / 2 // e.g., u1 ',' u2 ',' u3
+		tlist = make([]fgg.Type, nus)
+		for i := nus - 1; i >= 0; i-- {
+			tlist[i] = a.pop().(fgg.Type) // Adding backwards
+		}
+	}
+	a.push(fgg.NewITypeLit(specs, tlist))
 }
 
 /* "typeFormals", "typeFDecls", "typeFDecl" */

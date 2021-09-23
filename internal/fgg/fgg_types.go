@@ -3,17 +3,19 @@ package fgg
 import (
 	"github.com/rhu1/fgg/internal/base"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
 /* Exports */
 
-func NewTParam(name Name) TParam                 { return TParam(name) }
-func NewTNamed(t Name, us []Type) TNamed         { return TNamed{t, us} }
-func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
-func NewSTypeLit(fds []FieldDecl) STypeLit       { return STypeLit{fds} }
-func NewITypeLit(specs []Spec) ITypeLit          { return ITypeLit{specs} }
+func NewTParam(name Name) TParam                      { return TParam(name) }
+func NewTNamed(t Name, us []Type) TNamed              { return TNamed{t, us} }
+func NewTPrimitive(t Tag) TPrimitive                  { return TPrimitive{t, false} }
+func NewUndefTPrimitive(t Tag) TPrimitive             { return TPrimitive{t, true} }
+func NewSTypeLit(fds []FieldDecl) STypeLit            { return STypeLit{fds} }
+func NewITypeLit(specs []Spec, tlist []Type) ITypeLit { return ITypeLit{specs, tlist} }
+
+func NewTypeList(tlist []Type) TypeList { return tlist }
 
 /* Type parameters */
 
@@ -41,7 +43,7 @@ func (a TParam) SubsEtaClosed(eta EtaClosed) GroundType {
 func (a TParam) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	if a1, ok := u.(TParam); ok {
 		return a == a1
-	} else {
+	} else if isIfaceLikeType(ds, u) { // todo review this -- which types can a TParam implement?
 		//return bounds(delta, a).ImplsDelta(ds, delta, u) // !!! more efficient?
 		gs0 := methodsDelta(ds, delta, a)
 		gs := methodsDelta(ds, delta, u)
@@ -53,6 +55,8 @@ func (a TParam) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 			}
 		}
 		return true
+	} else {
+		return false
 	}
 }
 
@@ -143,6 +147,12 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 			return false
 		}
 	case ITypeLit:
+		if u.HasTList() {
+			tlist := u.GetTList(ds)
+			if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // TODO initial version; not accounting for https://github.com/golang/go/issues/45346
+				return false
+			}
+		}
 		gs := methodsDelta(ds, delta, u)   // u is a t_I
 		gs0 := methodsDelta(ds, delta, u0) // t0 may be any
 		return gs0.IsSupersetOf(gs)
@@ -268,11 +278,57 @@ func (t TPrimitive) SubsEtaClosed(eta EtaClosed) GroundType {
 	return t
 }
 
-func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
-	if !t0.Undefined() {
-		panic("FitsIn: t0 is not undefined")
+func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
+
+	if t0.Undefined() {
+		return t0.canConvertTo(ds, delta, u)
 	}
-	if t0.tag > t.tag {
+
+	switch u_cast := u.(type) {
+	case TPrimitive:
+		return t0.Equals(u_cast)
+	case TNamed:
+		return isIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
+	case ITypeLit:
+		if u_cast.HasTList() {
+			if !(u_cast.GetTList(ds).Contains(t0)) {
+				return false
+			}
+		}
+		return len(methods(ds, u_cast)) == 0
+	default: // TParam, STypeLit, ...
+		return false
+	}
+}
+
+func (t0 TPrimitive) canConvertTo(ds []Decl, delta Delta, u Type) bool {
+	if !t0.Undefined() {
+		panic("shouldn't get here")
+	}
+	switch under := u.Underlying(ds).(type) {
+	case TPrimitive:
+		return t0.fitsIn(under)
+	case TParam:
+		constraint := bounds(delta, u)
+		return t0.canConvertTo(ds, delta, constraint) // falls into case below
+	case ITypeLit:
+		if under.HasTList() {
+			for _, u2 := range under.GetTList(ds) {
+				if !t0.canConvertTo(ds, delta, u2) {
+					return false
+				}
+			}
+		}
+		return len(methods(ds, under)) == 0
+	}
+	return false
+}
+
+func (t0 TPrimitive) fitsIn(t TPrimitive) bool {
+	if !t0.Undefined() {
+		panic("shouldn't get here")
+	}
+	if t0.tag > t.tag { // necessary check??
 		return false
 	}
 	switch t0.tag {
@@ -285,29 +341,7 @@ func (t0 TPrimitive) FitsIn(t TPrimitive) bool {
 	case FLOAT32, FLOAT64:
 		return FLOAT32 <= t.tag && t.tag <= FLOAT64
 	default:
-		panic("FitsIn: t0 has unsupported type: " + t0.String())
-	}
-}
-
-func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
-	// TODO it may be better to separate defined/undefined TPrimitives (?)
-	switch u_cast := u.(type) {
-	case TPrimitive:
-		if t0.Undefined() {
-			return t0.FitsIn(u_cast)
-		} else {
-			return t0.Equals(u_cast)
-		}
-	case TNamed:
-		if t0.Undefined() { // e.g. 1 'implements' MyInt
-			return t0.ImplsDelta(ds, delta, u.Underlying(ds))
-		} else { // but e.g. int doesn't implement MyInt
-			return isIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
-		}
-	case ITypeLit:
-		return len(methods(ds, u_cast)) == 0 // or if t0 belongs to type list
-	default:
-		return false
+		panic("FitsIn: t has unsupported type: " + t.String())
 	}
 }
 
@@ -329,18 +363,15 @@ func (t0 TPrimitive) Equals(t base.Type) bool {
 }
 
 func (t TPrimitive) String() string {
-	var b strings.Builder
-	b.WriteString("TPrimitive{")
-	b.WriteString("tag=")
-	b.WriteString(NameFromTag(t.tag))
-	b.WriteString(", undefined=")
-	b.WriteString(strconv.FormatBool(t.undefined))
-	b.WriteString("}")
-	return b.String()
+	undef := ""
+	if t.undefined {
+		undef = "(undefined)"
+	}
+	return NameFromTag(t.tag) + undef
 }
 
 func (t TPrimitive) ToGoString(ds []Decl) string {
-	panic("implement me")
+	return t.String()
 }
 
 func (t TPrimitive) Underlying(ds []Decl) Type {
@@ -461,11 +492,32 @@ func (fd FieldDecl) String() string {
 
 type ITypeLit struct {
 	specs []Spec
+	tlist TypeList
 }
 
 var _ Type = ITypeLit{}
 
 func (i ITypeLit) GetSpecs() []Spec { return i.specs }
+func (i ITypeLit) HasTList() bool {
+	return i.tlist != nil && len(i.tlist) > 0
+}
+
+// When a constraint embeds another constraint, the type list of
+// the final constraint is the intersection of all the type lists involved.
+// If there are multiple embedded types, intersection preserves the property
+// that any type argument must satisfy the requirements of all embedded types.
+func (i ITypeLit) GetTList(ds []Decl) TypeList {
+	res := i.tlist
+	for _, spec := range i.specs {
+		if emb, ok := spec.(TNamed); ok {
+			emb_under := emb.Underlying(ds).(ITypeLit) // checked in ok
+			if emb_under.HasTList() {
+				res = res.intersect(emb_under.GetTList(ds))
+			}
+		}
+	}
+	return res
+}
 
 func (i ITypeLit) SubsEtaClosed(eta EtaClosed) GroundType {
 	specs := make([]Spec, len(i.specs))
@@ -480,7 +532,7 @@ func (i ITypeLit) SubsEtaClosed(eta EtaClosed) GroundType {
 			specs[i] = s.SubsEtaClosed(eta).(TNamed)
 		}
 	}
-	return ITypeLit{specs}
+	return ITypeLit{specs, i.tlist}
 }
 
 func (i ITypeLit) SubsEtaOpen(eta EtaOpen) Type {
@@ -493,7 +545,7 @@ func (i ITypeLit) SubsEtaOpen(eta EtaOpen) Type {
 			specs[i] = s.SubsEtaOpen(eta).(TNamed)
 		}
 	}
-	return ITypeLit{specs}
+	return ITypeLit{specs, i.tlist}
 }
 
 func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
@@ -537,6 +589,9 @@ func (i ITypeLit) Ok(ds []Decl, delta Delta) {
 				i.String())
 		}
 	}
+	if i.HasTList() {
+		i.tlist.Ok(ds, delta)
+	}
 }
 
 func (i ITypeLit) Equals(t base.Type) bool {
@@ -546,12 +601,13 @@ func (i ITypeLit) Equals(t base.Type) bool {
 	}
 
 	// goal: methodSet(i) == methodSet(other), regardless of order
-	// > this version is still sensible to order
+	// > this version is still sensible to order (todo)
 	for idx, spec := range i.specs {
 		if !specEquals(spec, other.specs[idx]) {
 			return false
 		}
 	}
+	// todo compare type lists?
 	return true
 }
 
@@ -571,7 +627,10 @@ func specEquals(s1, s2 Spec) bool {
 
 func (i ITypeLit) String() string {
 	var b strings.Builder
-	b.WriteString(" interface {")
+	b.WriteString(" interface { ")
+	if i.HasTList() {
+		b.WriteString(i.tlist.String())
+	}
 	if len(i.specs) > 0 {
 		b.WriteString(" ")
 		b.WriteString(i.specs[0].String())
@@ -591,6 +650,56 @@ func (i ITypeLit) ToGoString(ds []Decl) string {
 
 func (i ITypeLit) Underlying(ds []Decl) Type {
 	return i
+}
+
+/******************************************************************************/
+/* Type lists (cf. ITypeLit) -- not a type itself, just a helper */
+
+type TypeList []Type
+
+func (tlist0 TypeList) intersect(tlist TypeList) TypeList {
+	inter := TypeList{}
+	for _, t := range tlist0 {
+		if tlist.Contains(t) {
+			inter = append(inter, t)
+		}
+	}
+	return inter
+}
+
+func (tlist0 TypeList) Contains(t Type) bool {
+	for _, t2 := range tlist0 {
+		if t2.Equals(t) {
+			return true
+		}
+	}
+	return false
+}
+
+func (tlist0 TypeList) Ok(ds []Decl, delta Delta) {
+	seen_tl := make(map[string]Type) // key is u.String()
+	for _, u := range tlist0 {
+		k := u.String()
+		if _, ok := seen_tl[k]; ok {
+			panic("Duplicate type: " + k + " in type list\n\t" + tlist0.String())
+		}
+		seen_tl[k] = u
+
+		if isIfaceType(ds, u) {
+			under := u.Underlying(ds).(ITypeLit)
+			if under.HasTList() {
+				panic("") // todo   "interface Contains type constraints", according to go2goplay
+			}
+		}
+		u.Ok(ds, delta)
+	}
+}
+
+func (tlist0 TypeList) String() string {
+	var b strings.Builder
+	b.WriteString("type ")
+	writeTypes(&b, tlist0)
+	return b.String()
 }
 
 /******************************************************************************/
