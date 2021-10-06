@@ -229,6 +229,9 @@ type FGGExpr interface {
 	// gamma and delta should be treated immutably
 	Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr)
 	Eval(ds []Decl) (FGGExpr, string)
+
+	Infer(ds []Decl, delta Delta, gamma Gamma) Type // todo retornar um Delta que representa bounds de TVar ainda nao unificada
+
 }
 
 /* Helpers */

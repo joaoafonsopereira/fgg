@@ -21,7 +21,7 @@ type Program interface {
 	AstNode
 	GetDecls() []Decl
 	GetMain() Expr
-	Ok(allowStupid bool) (Type, Program) // Set false for source check
+	Ok(allowStupid bool, mode TypingMode) (Type, Program) // Set false for source check
 	Eval() (Program, string)  // Eval one step; string is the name of the (innermost) applied rule
 }
 
@@ -45,3 +45,12 @@ type Type interface {
 type Adaptor interface {
 	Parse(strictParse bool, input string) Program
 }
+
+/* Typing modes */ // TODO decide where (pkg/file) does it make more sense to put this
+
+type TypingMode int
+
+const (
+	CHECK TypingMode = iota
+	INFER
+)

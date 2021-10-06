@@ -70,7 +70,7 @@ func (p FGGProgram) GetDecls() []Decl   { return p.decls } // Return a copy?
 func (p FGGProgram) GetMain() base.Expr { return p.e_main }
 func (p FGGProgram) IsPrintf() bool     { return p.printf } // HACK
 
-func (p FGGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
+func (p FGGProgram) Ok(allowStupid bool, mode base.TypingMode) (base.Type, base.Program) {
 	tds := make(map[string]TypeDecl) // Type name
 	mds := make(map[string]MethDecl) // Hack, string = md.recv.t + "." + md.name
 	for _, v := range p.decls {
@@ -84,7 +84,11 @@ func (p FGGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
 			}
 			tds[t] = d
 		case MethDecl:
-			d.Ok(p.decls)
+			if mode == base.CHECK {
+				d.Ok(p.decls)
+			} else if mode == base.INFER {
+				d.OkInfer(p.decls)
+			}
 			hash := string(d.t_recv) + "." + d.name
 			if _, ok := mds[hash]; ok {
 				panic("Multiple declarations for receiver " + string(d.t_recv) +
@@ -99,8 +103,14 @@ func (p FGGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
 	// Empty envs for main
 	var delta Delta
 	var gamma Gamma
-	typ, ast := p.e_main.Typing(p.decls, delta, gamma, allowStupid)
-	return typ, FGGProgram{p.decls, ast, p.printf}
+	var typ Type
+	e_main := p.e_main
+	if mode == base.CHECK {
+		typ, e_main = p.e_main.Typing(p.decls, delta, gamma, allowStupid)
+	} else if mode == base.INFER {
+		typ = p.e_main.Infer(p.decls, delta, gamma) // TODO should return the same Ast or an annotated one?
+	}
+	return typ, FGGProgram{p.decls, e_main, p.printf}
 }
 
 func (p FGGProgram) Eval() (base.Program, string) {
@@ -157,6 +167,39 @@ func (md MethDecl) GetReturn() Type            { return md.u_ret }
 func (md MethDecl) GetBody() FGGExpr           { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
+
+	delta, gamma := md.okBase(ds)
+	allowStupid := false
+	// don't care about 'ast' returned from typing of method body -- only from method Call
+	u, _ := md.e_body.Typing(ds, delta, gamma, allowStupid)
+
+	/*fmt.Println("a:", u)
+	fmt.Println("b:", md.u_ret)
+	fmt.Println("c:", u.ImplsDelta(ds, delta, md.u_ret))*/
+
+	if !u.ImplsDelta(ds, delta, md.u_ret) {
+		panic("Method body type must implement declared return type: found=" +
+			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
+	}
+}
+
+func (md MethDecl) OkInfer(ds []Decl) {
+	delta, gamma := md.okBase(ds)
+
+	u := md.e_body.Infer(ds, delta, gamma) // TODO infer esta a retornar Nil(aa1), mas nao retorna Delta produzido durante geraçao de aa1
+
+	if md.t_recv == "Nil" {
+		return // todo very hacky
+	}
+
+	//unify(ds, delta, u, md.u_ret) // panic if not possible -- todo maybe try to handle the error?
+	if !u.ImplsDelta(ds, delta, md.u_ret) {
+		panic("Method body type must implement declared return type: found=" +
+			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
+	}
+}
+
+func (md MethDecl) okBase(ds []Decl) (Delta, Gamma) {
 	// (type t_S(Phi') T ) ∈ D
 	recv_decl := getTDecl(ds, md.t_recv) // panics if not found
 	if isIfaceType(ds, recv_decl.GetSourceType()) {
@@ -201,18 +244,8 @@ func (md MethDecl) Ok(ds []Decl) {
 		gamma[v.name] = v.u
 	}
 	md.u_ret.Ok(ds, delta)
-	allowStupid := false
-	// don't care about 'ast' returned from typing of method body -- only from method Call
-	u, _ := md.e_body.Typing(ds, delta, gamma, allowStupid)
 
-	/*fmt.Println("a:", u)
-	fmt.Println("b:", md.u_ret)
-	fmt.Println("c:", u.ImplsDelta(ds, delta, md.u_ret))*/
-
-	if !u.ImplsDelta(ds, delta, md.u_ret) {
-		panic("Method body type must implement declared return type: found=" +
-			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
-	}
+	return delta, gamma
 }
 
 func (md MethDecl) ToSig() Sig {
