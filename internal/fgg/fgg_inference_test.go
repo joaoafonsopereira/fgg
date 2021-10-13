@@ -140,11 +140,13 @@ func TestInfer_mapExample001b(t *testing.T) {
 	fggParseAndInferGood(t, Any, S, Function, List, MapImpl, e)
 }
 
+// 2-elem list
 func TestInfer_mapExample001bb(t *testing.T) {
 	e := "Cons(){ S(){}, Cons(){S(){}, Nil(){}} }"
 	fggParseAndInferGood(t, Any, S, Function, List, MapImpl, e)
 }
 
+// list of lists
 func TestInfer_mapExample001bbb(t *testing.T) {
 	e := "Cons(){ Cons(){S(){}, Nil(){}}, Nil(){} }"
 	fggParseAndInferGood(t, Any, S, Function, List, MapImpl, e)
@@ -173,11 +175,7 @@ func TestInfer_mapExample003(t *testing.T) {
 func TestInfer_mapExample004(t *testing.T) {
 	SFoo := "type SFoo(type ) struct {}"
 	SFooM := "func (this SFoo(type )) foo(type b Any())(x List(b)) List(b) { return x }"
-	e := "SFoo(){}.foo()( Cons(){S(){}, Nil(){}} )" // <<<<<<<<<<<<<<<--------------------- questão agora é inferir o parametro de tipo de e.g. Nil
-	// Ou de forma mais geral: em que situação é que Infer pode retornar um tipo com fresh TVars? .. Refletir um pouco sobre isto apos o almocinho
-	// -- quando o StructLit nao tem argumentos a partir dos quais inferir tipos -- e.g. Struct vazia (Nil)
-	// -- neste caso é preciso "inventar" um tipo
-	// Pode-se dizer que é isto que distingue, em unify(t1, t2), casos em que t1 tem fresh TVars?
+	e := "SFoo(){}.foo()( Cons(){S(){}, Nil(){}} )"
 	fggParseAndInferGood(t, Any, S, Function, List, MapImpl, SFoo, SFooM, e)
 }
 

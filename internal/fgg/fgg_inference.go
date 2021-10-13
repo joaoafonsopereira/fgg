@@ -5,70 +5,86 @@ import (
 	"strings"
 )
 
-type Constraint interface {
-	U1() Type
-	U2() Type
-	SubsEtaOpen(EtaOpen) Constraint
-	Unify(ds []Decl, delta Delta) EtaOpen
-}
+/* Subtype and Equality constraints - definition and basic methods */
 
-type constraintBase struct {
+// Constraint of the form u1 <: u2
+type SubtypeConstr struct{
 	u1, u2 Type
 }
 
-func (c constraintBase) U1() Type { return c.u1 }
-func (c constraintBase) U2() Type { return c.u2 }
-func (c constraintBase) subsEtaOpen(eta EtaOpen) constraintBase {
-	return constraintBase{c.u1.SubsEtaOpen(eta), c.u2.SubsEtaOpen(eta)}
-}
-
-// Constraints of the form u1 <: u2
-type SubtypeConstr struct{
-	constraintBase
-}
-var _ Constraint = SubtypeConstr{}
-
 func NewSubtypeConstr(s, t Type) SubtypeConstr {
-	return SubtypeConstr{constraintBase{s, t}}
+	return SubtypeConstr{s, t}
 }
-func (c SubtypeConstr) SubsEtaOpen(eta EtaOpen) Constraint {
-	return SubtypeConstr{c.subsEtaOpen(eta)}
+func (c SubtypeConstr) SubsEtaOpen(eta EtaOpen) SubtypeConstr {
+	return SubtypeConstr{c.u1.SubsEtaOpen(eta), c.u2.SubsEtaOpen(eta)}
 }
 
-// Constraints of the form u1 == u2
+// Constraint of the form u1 == u2
 type EqualityConstr struct{
-	constraintBase
+	u1, u2 Type
 }
-var _ Constraint = EqualityConstr{}
 
 func NewEqualityConstr(t1, t2 Type) EqualityConstr {
-	return EqualityConstr{constraintBase{t1, t2}}
+	return EqualityConstr{t1, t2}
 }
 
-func (c EqualityConstr) SubsEtaOpen(eta EtaOpen) Constraint {
-	return EqualityConstr{c.subsEtaOpen(eta)}
+func (c EqualityConstr) SubsEtaOpen(eta EtaOpen) EqualityConstr {
+	return EqualityConstr{c.u1.SubsEtaOpen(eta), c.u2.SubsEtaOpen(eta)}
 }
 
-// Set of constraints
+/* Sets of constraints - duplicated functionalities for lack of a better solution (e.g. generics) */
+
+// Set of equality constraints
 // note: assumes that the constraints are unifiable "1 by 1" -- C.f. UnifyAll and compose
-type ConstraintSet []Constraint
+type EqConstraintSet []EqualityConstr
 
-func NewConstraintSet() ConstraintSet {
-	return make(ConstraintSet, 0, 10)
+func NewEqConstraintSet() EqConstraintSet {
+	return make(EqConstraintSet, 0, 10)
 }
 
-func (cs ConstraintSet) SubsEtaOpen(eta EtaOpen) ConstraintSet {
+func (cs EqConstraintSet) SubsEtaOpen(eta EtaOpen) EqConstraintSet {
 	for i, c := range cs {
 		cs[i] = c.SubsEtaOpen(eta)
 	}
 	return cs
 }
 
-func (cs ConstraintSet) Add(c ...Constraint) ConstraintSet {
+func (cs EqConstraintSet) Add(c... EqualityConstr) EqConstraintSet {
 	return append(cs, c...)
 }
 
-func (cs ConstraintSet) UnifyAll(ds []Decl, delta Delta) EtaOpen {
+func (cs EqConstraintSet) UnifyAll(ds []Decl, delta Delta) EtaOpen {
+	if len(cs) == 0 {
+		return EtaOpen{}
+	}
+	c, cs_ := cs[0], cs[1:]
+	eta := c.Unify(ds, delta)
+	cs_ = cs_.SubsEtaOpen(eta)
+	return compose(cs_.UnifyAll(ds, delta), eta)
+	// se unifyAll retornasse (EtaOpen, error), o que quereria fazer é algo como
+	// unifyAll(cs.SubsEtaOpen(subs), delta) >>= \s' -> compose(s', subs)
+}
+
+// Set of subtype/impls (<:) constraints
+// note: assumes that the constraints are unifiable "1 by 1" -- C.f. UnifyAll and compose
+type SubConstraintSet []SubtypeConstr
+
+func NewSubConstraintSet() SubConstraintSet {
+	return make(SubConstraintSet, 0, 10)
+}
+
+func (cs SubConstraintSet) SubsEtaOpen(eta EtaOpen) SubConstraintSet {
+	for i, c := range cs {
+		cs[i] = c.SubsEtaOpen(eta)
+	}
+	return cs
+}
+
+func (cs SubConstraintSet) Add(c... SubtypeConstr) SubConstraintSet {
+	return append(cs, c...)
+}
+
+func (cs SubConstraintSet) UnifyAll(ds []Decl, delta Delta) EtaOpen {
 	if len(cs) == 0 {
 		return EtaOpen{}
 	}
@@ -111,109 +127,119 @@ func compose(s1, s2 EtaOpen) EtaOpen {
 	return res
 }
 
-/* Unification */
+/* Unification of a Subtype/Equality constraint */
 
+func bindSub(x FreshTVar, u Type) EtaOpen {
+	if x.Equals(u) {
+		return EtaOpen{}
+	} else if occursCheck(x, u) {
+		panic("Cannot construct infinite type: " + x.String() + " ~ " + u.String())
+	} else {
+		// if u1.ImplsDelta( delta[u2_cast] ) ... todo check bounds
+		return EtaOpen{x.TParam: u}
+	}
+}
+
+// todo are these 2 binds different? If they are, it is due to the way the bounds are checked
+func bindEq(x FreshTVar, u Type) EtaOpen {
+	if occursCheck(x, u) {
+		panic("Cannot construct infinite type: " + x.String() + " ~ " + u.String())
+	} else {
+		// if u1.ImplsDelta( delta[u2_cast] ) ... todo check bounds
+		return EtaOpen{x.TParam: u}
+	}
+}
+
+// the goal is to find a substitution eta s.t. u1[eta] <: u2[eta]
 func (c SubtypeConstr) Unify(ds []Decl, delta Delta) EtaOpen {
 	u1 := c.u1
 	u2 := c.u2
-	if !hasFreshTVars(u2) {
-		if u1.ImplsDelta(ds, delta, u2) {
-			return EtaOpen{}
-		} else {
-			panic("Can't unify (<:) types " + u1.String() + " and " + u2.String())
-		}
-	}
-	// u2 has fresh type variables - u2 is either a TParam or a TNamed
-	// the goal is to find a substitution eta c.t. u1 <: u2[eta]
-	var eta EtaOpen
-	switch u2_cast := u2.(type) {
-	case TParam:
-		if occursCheck(u2_cast, u1) {
-			// throw error: infinite type
-		} else {
-			// if u1.ImplsDelta( delta[u2_cast] ) ... todo check bounds
-			//eta[u2_cast] = u1
-			eta = EtaOpen{u2_cast: u1}
-		}
 
-	case TNamed:
-		u1_cast, ok := u1.(TNamed)
-		if !ok {
-			// todo pode haver um tipo nao-TNamed a implementar um TNamed parameterized?
-			// e.g. int32 <: Adder(αα1) ?
-			panic("Can't unify (<:) types " + u1.String() + " and " + u2.String())
-		}
-		if u1_cast.t_name == u2_cast.t_name {
+	if u1_cast, ok := u1.(FreshTVar); ok {
+		return bindSub(u1_cast, u2)
+	}
+	if u2_cast, ok := u2.(FreshTVar); ok {
+		return bindSub(u2_cast, u1) // todo when considering bounds, will this test that bound(u2) <: bound(u1) ??
+	}
+
+	u1_named, ok1 := u1.(TNamed)
+	u2_named, ok2 := u2.(TNamed)
+	if ok1 && ok2 {
+		if u1_named.t_name == u2_named.t_name {
 
 			// TODO aqui nao devia recolher também equality constraints??
 			//  ou sera que e.g. S <: T  =>  List(S) <: List(T)  ---> para qualquer "tipo" List?
 			// return NewEqualityConstr(u1, u2).Unify(ds, delta)   <---- s
 
 			// unify vars of u2 with args of u1
-			constrs := NewConstraintSet()
-			for i, u_arg := range u2_cast.u_args {
+			constrs := NewSubConstraintSet()
+			for i, u_arg := range u2_named.u_args {
 				if hasFreshTVars(u_arg) {
-					c := NewSubtypeConstr(u1_cast.u_args[i], u_arg) // TODO should I be collecting constraints inside unify?
+					c := NewSubtypeConstr(u1_named.u_args[i], u_arg) // TODO should I be collecting constraints inside unify?
 					constrs = constrs.Add(c)                        //   Or maybe add that logic to a method AddConstraints that searches for name-matching TNameds?
-				} else if !u1_cast.u_args[i].ImplsDelta(ds, delta, u_arg) {
+				} else if !u1_named.u_args[i].ImplsDelta(ds, delta, u_arg) {
 					panic("")
 				}
 			}
-			eta = constrs.UnifyAll(ds, delta)
+			return constrs.UnifyAll(ds, delta)
 
 		} else {
-			// u2 tem q ser uma interface, e u1 um tipo q implementa essa interface
-			// -> unificar métodos? i.e. arranjar subst S t.q.
-			//    ms_t1.IsSupersetOf(ms_t2[S])
 			ms_t1 := methodsDelta(ds, delta, u1)
 			ms_t2 := methodsDelta(ds, delta, u2)
-			eta = unifyMethods(ds, delta, ms_t1, ms_t2)
+			return unifyMethods(ds, delta, ms_t1, ms_t2)
 		}
-	default:
-		panic("u2 neither TParam nor TNamed, u2 = " + u2.String())
 	}
-	return eta
+	// either u1 or u2 not a TNamed
 
-	// Pair(){1,2} inferido como Pair(TPrimitive{int, undef}, TPrimitive{int, undef})
-	// operaçao que usar Pair.x é que poderá ter um tipo mais "especifico" e.g. int32 (defined)
+	if u1.ImplsDelta(ds, delta, u2) {
+		return EtaOpen{}
+	} else {
+		panic("Can't unify (<:) types " + u1.String() + " and " + u2.String())
+	}
 
 }
 
 func (c EqualityConstr) Unify(ds []Decl, delta Delta) EtaOpen {
 	u1 := c.u1
 	u2 := c.u2
-	if u1.Equals(u2) {
-		return EtaOpen{}
+
+	if u1_cast, ok := u1.(FreshTVar); ok {
+		return bindEq(u1_cast, u2)
 	}
-	if u2_cast, ok := u2.(TParam); ok && isFreshTVar(u2_cast) {
-		if occursCheck(u2_cast, u1) { // TODO is occursCheck needed when I assume u1 will have no fresh TVars ?
-			// throw error: infinite type
-		} else {
-			return EtaOpen{u2_cast: u1}
-		}
+	if u2_cast, ok := u2.(FreshTVar); ok {
+		return bindEq(u2_cast, u1)
 	}
 
 	u1_cast, ok1 := u1.(TNamed)
 	u2_cast, ok2 := u2.(TNamed)
 	if ok1 && ok2 && u1_cast.t_name == u2_cast.t_name {
-		constrs := NewConstraintSet()
+		constrs := NewEqConstraintSet()
 		for i, u_arg := range u2_cast.u_args {
-			if hasFreshTVars(u_arg) {
-				c := NewEqualityConstr(u1_cast.u_args[i], u_arg) // TODO should I be collecting constraints inside unify?
-				constrs = constrs.Add(c)                         //   Or maybe add that logic to a method AddConstraints that searches for name-matching TNameds?
-			} else if !u_arg.Equals(u1_cast.u_args[i]) {
-				panic("")
-			}
+			c := NewEqualityConstr(u1_cast.u_args[i], u_arg) // TODO should I be collecting constraints inside unify?
+			constrs = constrs.Add(c)
+
+			//if hasFreshTVars(u_arg) {
+			//	c := NewEqualityConstr(u1_cast.u_args[i], u_arg)
+			//	constrs = constrs.Add(c)
+			//} else if !u_arg.Equals(u1_cast.u_args[i]) {
+			//	panic("")
+			//}
 		}
 		return constrs.UnifyAll(ds, delta)
 	}
-	panic("Can't unify (==) types " + u1.String() + " and " + u2.String())
+	// either u1 or u2 not a TNamed
+	// TODO consider untyped constants here
+	if u1.Equals(u2) {
+		return EtaOpen{}
+	} else {
+		panic("Can't unify (==) types " + u1.String() + " and " + u2.String())
+	}
 }
 
 // On successful unification, returns eta
 // s.t. ms1 [is a superset of/at least equal to] ms2[eta]
 func unifyMethods(ds []Decl, delta Delta, ms1, ms2 MethodSet) EtaOpen {
-	constrs := NewConstraintSet()
+	constrs := NewEqConstraintSet()
 	for name, sig2 := range ms2 {
 		sig1, ok := ms1[name]
 		if !ok {
@@ -228,13 +254,13 @@ func unifyMethods(ds []Decl, delta Delta, ms1, ms2 MethodSet) EtaOpen {
 	return constrs.UnifyAll(ds, delta)
 }
 
-func collectSigConstrs(g1, g2 Sig) ConstraintSet {
+func collectSigConstrs(g1, g2 Sig) EqConstraintSet {
 	subs1 := makeParamIndexSubs(g1.Psi) // todo maybe factor this + subsEtaOpen as e.g. canonicalizeSig
 	subs2 := makeParamIndexSubs(g2.Psi)
 	sig1 := g1.SubsEtaOpen(subs1)
 	sig2 := g2.SubsEtaOpen(subs2)
 
-	constrs := NewConstraintSet()
+	constrs := NewEqConstraintSet()
 	for i, tf1 := range sig1.Psi.tFormals {
 		c := NewEqualityConstr(tf1.u_I, sig2.Psi.tFormals[i].u_I)
 		constrs = constrs.Add(c)
@@ -258,16 +284,9 @@ func (x Variable) Infer(ds []Decl, delta Delta, gamma Gamma) Type {
 }
 
 func (s StructLit) Infer(ds []Decl, delta Delta, gamma Gamma) Type {
-	//if len(td.GetBigPsi().GetTFormals()) > 0 {
-	//	// assume len(s.u_S.GetTArgs()) == 0
-	//	u_S := instantiateType(s.u_S.GetName(), td.GetBigPsi())
-	//
-	//}
 
 	td := getTDecl(ds, s.u_S.GetName()) // panics if not found
-	u_S, deltaFresh := instantiateType(s.u_S.GetName(), td.GetBigPsi())
-	// add fresh vars' bounds info to delta
-	delta = addDeltas(deltaFresh, delta)
+	u_S := instantiateType(s.u_S.GetName(), td.GetBigPsi())
 
 	fs := fields(ds, u_S)
 	if len(s.elems) != len(fs) {
@@ -281,16 +300,9 @@ func (s StructLit) Infer(ds []Decl, delta Delta, gamma Gamma) Type {
 		panic(b.String())
 	}
 	//elems := make([]FGGExpr, len(s.elems))
-	constraints := NewConstraintSet()
+	constraints := NewSubConstraintSet()
 	for i := 0; i < len(s.elems); i++ {
 		u := s.elems[i].Infer(ds, delta, gamma)
-
-		if uu, ok := u.(TNamed); ok {
-			if uu.GetName() == "Nil" {
-				continue // todo very hacky
-			}
-		}
-
 		constr := NewSubtypeConstr(u, fs[i].u)
 		constraints = constraints.Add(constr)
 
@@ -302,7 +314,6 @@ func (s StructLit) Infer(ds []Decl, delta Delta, gamma Gamma) Type {
 		//}
 	}
 	subs := constraints.UnifyAll(ds, delta)
-	// todo verificar se ha subst para todas as fresh tvars de sigInst? o que significa se nao houver?
 
 	return u_S.SubsEtaOpen(subs) //, StructLit{s.u_S, elems}
 }
@@ -328,11 +339,9 @@ func (c Call) Infer(ds []Decl, delta Delta, gamma Gamma) Type {
 	}
 	//args := make([]FGGExpr, len(c.args))
 
-	// deltaFresh records the bounds for the fresh variables
-	sigInst, deltaFresh := instantiateSig(g)
-	delta = addDeltas(deltaFresh, delta)
+	sigInst := instantiateSig(g)
 
-	constraints := NewConstraintSet()
+	constraints := NewSubConstraintSet()
 	for i := 0; i < len(c.args); i++ {
 		u_a := c.args[i].Infer(ds, delta, gamma)
 
@@ -346,13 +355,7 @@ func (c Call) Infer(ds []Decl, delta Delta, gamma Gamma) Type {
 		//	args[i] = ConvertLitNode(lit, u_p)
 		//}
 	}
-	if c.meth == "foo" {
-		print("debug")
-	}
 	subs := constraints.UnifyAll(ds, delta)
-
-	// todo verificar se ha subst para todas as fresh tvars de sigInst?
-
 	return sigInst.u_ret.SubsEtaOpen(subs) //, Call{e_recv, c.meth, c.t_args, args}
 }
 
@@ -442,26 +445,63 @@ func (x Float64Val) Infer(ds []Decl, delta Delta, gamma Gamma) Type { return TPr
 func (x StringVal) Infer(ds []Decl, delta Delta, gamma Gamma) Type  { return TPrimitive{tag: STRING} }
 
 /******************************************************************************/
-/* Creation of fresh type variables */
+/* Fresh type variables */
+
+// +- same distinction as between type vars in a Type scheme (TParam)
+// and fresh/free Type variables
+type FreshTVar struct {
+	//x TParam
+	TParam
+	bound Type
+}
+
+var _ Type = FreshTVar{}
+
+func newFreshTVar(name TParam, bound Type) FreshTVar {
+	return FreshTVar{name, bound}
+}
+
+func (tv FreshTVar) SubsEtaOpen(eta EtaOpen) Type {
+	res, ok := eta[tv.TParam]
+	if !ok {
+		return tv
+	}
+	return res
+}
+
+func (tv FreshTVar) Underlying(ds []Decl) Type {
+	return tv
+}
+
+// Adds recorded bound to Delta before calling the normal TParam.ImplsDelta.
+// Needed because the bound for a fresh type var may not be in context
+// e.g., inferring the type of the empty List results in a Nil(ααX),
+//       but since Infer doesn't return a Delta, the context for ααX is lost.
+func (tv FreshTVar) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
+	extendedDelta := make(Delta)
+	for param, bound := range delta {
+		extendedDelta[param] = bound
+	}
+	extendedDelta[tv.TParam] = tv.bound
+	return tv.TParam.ImplsDelta(ds, extendedDelta, u)
+}
 
 const FreshPrefix = "αα"
-
 var freshCount = 0 // global var
-func fresh() TParam {
+func freshName() TParam {
 	res := TParam(FreshPrefix + strconv.Itoa(freshCount+1))
 	freshCount++
 	return res
 }
 
-func isFreshTVar(x TParam) bool {
-	return strings.HasPrefix(string(x), FreshPrefix)
+func isFreshTVar(u Type) bool {
+	_, ok := u.(FreshTVar)
+	return ok
 }
 
 func hasFreshTVars(u Type) bool {
-	if x, ok := u.(TParam); ok {
-		if isFreshTVar(x) {
-			return true
-		}
+	if isFreshTVar(u) {
+		return true
 	}
 	if u_cast, ok := u.(TNamed); ok {
 		for _, u_arg := range u_cast.u_args {
@@ -473,46 +513,66 @@ func hasFreshTVars(u Type) bool {
 	return false
 }
 
-func instantiateType(tname Name, Psi BigPsi) (TNamed, Delta) {
-	subs := make(EtaOpen)
+func instantiatePsi(Psi BigPsi) map[TParam]FreshTVar {
+	subs := make(map[TParam]Type)
 	for _, tf := range Psi.GetTFormals() {
-		subs[tf.name] = fresh()
+		subs[tf.name] = freshName()
 	}
-
-	insts := make([]Type, len(Psi.GetTFormals()))
-	delta := make(Delta)
-	for i, tf := range Psi.GetTFormals() {
+	resSubs := make(map[TParam]FreshTVar)
+	for _, tf := range Psi.GetTFormals() {
 		x := subs[tf.name].(TParam)
-		insts[i] = x
-		delta[x] = tf.u_I.SubsEtaOpen(subs)
+		bound := tf.u_I.SubsEtaOpen(subs)
+		resSubs[tf.name] = newFreshTVar(x, bound)
 	}
-	return NewTNamed(tname, insts), delta
+	return resSubs
 }
 
-func instantiateSig(sig Sig) (Sig, Delta) {
-	subs := make(map[TParam]Type)
-	for _, tf := range sig.Psi.tFormals {
-		subs[tf.name] = fresh()
+func instantiateType(tname Name, Psi BigPsi) TNamed {
+	//subs := make(EtaOpen)
+	//for _, tf := range Psi.GetTFormals() {
+	//	subs[tf.name] = freshName()
+	//}
+	insts := instantiatePsi(Psi)
+
+	args := make([]Type, len(Psi.GetTFormals()))
+	for i, tf := range Psi.GetTFormals() {
+		args[i] = insts[tf.name]
 	}
-	delta := make(Delta)
-	for _, tf := range sig.Psi.tFormals {
-		x := subs[tf.name].(TParam)
-		delta[x] = tf.u_I.SubsEtaOpen(subs)
+	return NewTNamed(tname, args)
+}
+
+func instantiateSig(sig Sig) Sig {
+	//subs := make(map[TParam]Type)
+	//for _, tf := range sig.Psi.tFormals {
+	//	subs[tf.name] = freshName()
+	//}
+	//delta := make(Delta)
+	//for _, tf := range sig.Psi.tFormals {
+	//	x := subs[tf.name].(TParam)
+	//	delta[x] = tf.u_I.SubsEtaOpen(subs)
+	//}
+
+	insts := instantiatePsi(sig.Psi)
+	// "cast" insts to EtaOpen to take advantage of existing .SubsEtaOpen "infrastructure"
+	eta := make(EtaOpen)
+	for param, tVar := range insts {
+		eta[param] = tVar
 	}
+
 	// subs in param declarations' types
 	ps := make([]ParamDecl, len(sig.pDecls))
 	for i, pd := range sig.pDecls {
-		ps[i] = ParamDecl{pd.name, pd.u.SubsEtaOpen(subs)}
+		ps[i] = ParamDecl{pd.name, pd.u.SubsEtaOpen(eta)}
 	}
 	// subs in u_ret
-	u_ret := sig.u_ret.SubsEtaOpen(subs)
+	u_ret := sig.u_ret.SubsEtaOpen(eta)
 	return Sig{sig.meth,
 		BigPsi{}, // todo all the type parameters were instantiated (?)
-		ps, u_ret}, delta
+		ps, u_ret}
 }
 
-func occursCheck(a TParam, u Type) bool {
-	for _, fvar := range fv(u) { // TODO take care: func fv assumes that u is either a TParam or a TNamed
+func occursCheck(a FreshTVar, u Type) bool {
+	for _, fvar := range ftvs(u) {
 		if a.Equals(fvar) {
 			return true
 		}
@@ -520,14 +580,16 @@ func occursCheck(a TParam, u Type) bool {
 	return false
 }
 
-// deltas treated immutably, hence kinda inefficient
-func addDeltas(d1, d2 Delta) Delta {
-	res := make(Delta)
-	for x, u_I := range d1 {
-		res[x] = u_I
+// duplicates fv in fgg_ismonom, only changes the return type
+func ftvs(u Type) []FreshTVar {
+	if cast, ok := u.(FreshTVar); ok {
+		return []FreshTVar{cast}
 	}
-	for x, u_I := range d2 {
-		res[x] = u_I
+	res := []FreshTVar{}
+	if cast, ok := u.(TNamed); ok {
+		for _, v := range cast.u_args {
+			res = append(res, ftvs(v)...)
+		}
 	}
 	return res
 }

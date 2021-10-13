@@ -186,17 +186,8 @@ func (md MethDecl) Ok(ds []Decl) {
 func (md MethDecl) OkInfer(ds []Decl) {
 	delta, gamma := md.okBase(ds)
 
-	u := md.e_body.Infer(ds, delta, gamma) // TODO infer esta a retornar Nil(aa1), mas nao retorna Delta produzido durante geraçao de aa1
-
-	if md.t_recv == "Nil" {
-		return // todo very hacky
-	}
-
-	//unify(ds, delta, u, md.u_ret) // panic if not possible -- todo maybe try to handle the error?
-	if !u.ImplsDelta(ds, delta, md.u_ret) {
-		panic("Method body type must implement declared return type: found=" +
-			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
-	}
+	u := md.e_body.Infer(ds, delta, gamma)
+	NewSubtypeConstr(u, md.u_ret).Unify(ds, delta) // todo maybe handle the error?
 }
 
 func (md MethDecl) okBase(ds []Decl) (Delta, Gamma) {
