@@ -537,7 +537,7 @@ func (s Sprintf) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr)
 	for i := 0; i < len(s.args); i++ {
 		_, args[i] = s.args[i].Typing(ds, gamma, allowStupid)
 	}
-	return TPrimitive{tag: STRING}, Sprintf{s.format, args}
+	return NewDefTPrimitive(STRING), Sprintf{s.format, args}
 }
 
 // From base.Expr

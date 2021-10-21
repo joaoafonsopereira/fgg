@@ -1,15 +1,27 @@
 package frontend
 
 import (
-	"reflect"
-	"regexp"
-	"strings"
-
 	"github.com/rhu1/fgg/internal/base"
 	"github.com/rhu1/fgg/internal/fg"
 	"github.com/rhu1/fgg/internal/fgg"
 	"github.com/rhu1/fgg/internal/fgr"
+	"regexp"
 )
+
+// helpers - perform both casts (Type, Program) in a single line
+// (useful because Ok returns 2 values)
+
+func castFG(t base.Type, p base.Program) (fg.Type, fg.FGProgram) {
+	return t.(fg.Type), p.(fg.FGProgram)
+}
+
+func castFGG(t base.Type, p base.Program) (fgg.Type, fgg.FGGProgram) {
+	return t.(fgg.Type), p.(fgg.FGGProgram)
+}
+
+func castFGR(t base.Type, p base.Program) (fgr.Type, fgr.FGRProgram) {
+	return t.(fgr.Type), p.(fgr.FGRProgram)
+}
 
 /* monom simulation check */
 
@@ -17,7 +29,7 @@ import (
 func TestMonom(printf bool, verbose bool, src string, steps int) {
 	intrp_fgg := NewFGGInterp(verbose, src, true)
 	p_fgg := intrp_fgg.GetProgram().(fgg.FGGProgram)
-	u := p_fgg.Ok(false).(fgg.Type) // TNamed, except TParam for primitives (string)
+	u_fgg, p_fgg := castFGG( p_fgg.Ok(false, base.CHECK) )
 	VPrintln(verbose, "\nFGG expr: "+p_fgg.GetMain().String())
 
 	if ok, msg := fgg.IsMonomOK(p_fgg); !ok {
@@ -31,12 +43,12 @@ func TestMonom(printf bool, verbose bool, src string, steps int) {
 	omega := fgg.GetOmega(ds_fgg, p_fgg.GetMain().(fgg.FGGExpr))
 	p_mono := fgg.ApplyOmega(p_fgg, omega) // TODO: can just monom expr (ground main) directly
 	VPrintln(verbose, "Monom expr: "+p_mono.GetMain().String())
-	t := p_mono.Ok(false).(fg.Type)
+	t_mono, p_mono := castFG( p_mono.Ok(false, base.CHECK) )
 	ds_mono := p_mono.GetDecls()
-	u_fg := fgg.ToMonomId(u)
-	if !t.Equals(u_fg) {
-		panic("-test-monom failed: types do not match\n\tFGG type=" + u.String() +
-			" -> " + u_fg.String() + "\n\tmono=" + t.String())
+	u_fg := fgg.ToMonomId(u_fgg)
+	if !t_mono.Equals(u_fg) {
+		panic("-test-monom failed: types do not match\n\tFGG type=" + u_fgg.String() +
+			" -> " + u_fg.String() + "\n\tmono=" + t_mono.String())
 	}
 
 	done := steps > EVAL_TO_VAL
@@ -74,7 +86,7 @@ func TestMonom(printf bool, verbose bool, src string, steps int) {
 		}
 
 		// Repeat: horizontal arrows and right-vertical arrow
-		p_fgg, u, p_mono = testMonomStep(verbose, omega, p_fgg, u, p_mono)
+		p_fgg, u_fgg, p_mono = testMonomStep(verbose, omega, p_fgg, u_fgg, p_mono)
 	}
 	VPrintln(verbose, "\nFinished:\n\tfgg="+p_fgg.GetMain().String()+
 		"\n\tmono="+p_mono.GetMain().String())
@@ -88,7 +100,7 @@ func testMonomStep(verbose bool, omega fgg.Omega, p_fgg fgg.FGGProgram,
 	// Upper-horizontal arrow
 	p1_fgg, _ := p_fgg.Eval()
 	VPrintln(verbose, "\nEval FGG one step: "+p1_fgg.GetMain().String())
-	u1 := p1_fgg.Ok(true).(fgg.Type)    // TNamed, except TParam for primitives (string)
+	u1, p1_fgg := castFGG( p1_fgg.Ok(true, base.CHECK) )
 	if !u1.Impls(p_fgg.GetDecls(), u) { // TODO: factor out with Frontend.eval
 		panic("-test-monom failed: type not preserved\n\tprev=" + u.String() +
 			"\n\tnext=" + u1.String())
@@ -97,7 +109,7 @@ func testMonomStep(verbose bool, omega fgg.Omega, p_fgg fgg.FGGProgram,
 	// Lower-horizontal arrow
 	p1_mono, _ := p_mono.Eval()
 	VPrintln(verbose, "Eval monom one step: "+p1_mono.GetMain().String())
-	t1 := p1_mono.Ok(true).(fg.Type)
+	t1, p1_mono := castFG( p1_mono.Ok(true, base.CHECK) )
 	u1_fg := fgg.ToMonomId(u1)
 	if !t1.Equals(u1_fg) { // CHECKME: needed? or just do monom-level type preservation?
 		panic("-test-monom failed: types do not match\n\tFGG type=" + u1.String() +
@@ -108,62 +120,9 @@ func testMonomStep(verbose bool, omega fgg.Omega, p_fgg fgg.FGGProgram,
 	//res := fgg.Monomorph(p1_fgg.(fgg.FGGProgram))
 	res := fgg.ApplyOmega(p1_fgg.(fgg.FGGProgram), omega)
 	e_fgg := res.GetMain() // N.B. the monom'd FGG expr (i.e., an FGExpr)
-	e_mono := p1_mono.GetMain()
 	VPrintln(verbose, "Monom of one step'd FGG: "+e_fgg.String())
 
-	_, string_fgg := e_fgg.(fg.StringLit)
-	_, string_mono := e_mono.(fg.StringLit)
-	if !(string_fgg && string_mono) {
-		// Replaced parens by angle bracks -- hack for StringLit (cf. fgg/examples/ooplsa20/fig6/expression.fgg)
-		hacked := testMonomStringHack(e_fgg.(fg.FGExpr)).String()
-		if hacked != e_mono.String() {
-			panic("-test-monom failed: exprs do not match\n\tFGG expr=" + hacked +
-				"\n\tmono    =" + e_mono.String())
-		}
-	}
-
 	return p1_fgg.(fgg.FGGProgram), u1, p1_mono.(fg.FGProgram)
-}
-
-func testMonomStringHack(e1 fg.FGExpr) fg.FGExpr {
-	switch e := e1.(type) {
-	case fg.Variable:
-		return e
-	case fg.StructLit:
-		elems := e.GetElems()
-		es := make([]fg.FGExpr, len(elems))
-		for i, v := range elems {
-			es[i] = testMonomStringHack(v)
-		}
-		return fg.NewStructLit(e.GetType(), es)
-	case fg.Select:
-		return fg.NewSelect(testMonomStringHack(e.GetExpr()), e.GetField())
-	case fg.Call:
-		e_recv := testMonomStringHack(e.GetReceiver())
-		args := e.GetArgs()
-		es := make([]fg.FGExpr, len(args))
-		for i, v := range args {
-			es[i] = testMonomStringHack(v)
-		}
-		return fg.NewCall(e_recv, e.GetMethod(), es)
-	case fg.Assert:
-		return fg.NewAssert(testMonomStringHack(e.GetExpr()), e.GetType())
-	case fg.StringLit:
-		// HACK: currently works because users cannot write string literals, specifically '(' and ')'
-		msg := e.GetValue()
-		msg = strings.Replace(msg, "(", "<", -1)
-		msg = strings.Replace(msg, ")", ">", -1)
-		return fg.NewString(msg)
-	case fg.Sprintf:
-		args := e.GetArgs()
-		es := make([]fg.FGExpr, len(args))
-		for i, v := range args {
-			es[i] = testMonomStringHack(v)
-		}
-		return fg.NewSprintf(e.GetFormat(), es)
-	default:
-		panic("Unknown FGExpr type: " + reflect.TypeOf(e1).String() + "\n\t" + e1.String())
-	}
 }
 
 /* oblit "weak" simulation check */
@@ -171,14 +130,14 @@ func testMonomStringHack(e1 fg.FGExpr) fg.FGExpr {
 func TestOblit(verbose bool, src string, steps int) {
 	intrpFgg := NewFGGInterp(verbose, src, true)
 	pFgg := intrpFgg.GetProgram().(fgg.FGGProgram)
-	u := pFgg.Ok(false).(fgg.Type) // TNamed, except TParam for primitives (string)
+	u, pFgg := castFGG( pFgg.Ok(false, base.CHECK) )
 	VPrintln(verbose, "\nFGG expr: "+pFgg.GetMain().String())
 
 	// (Initial) left-vertical arrow
 	dsFgg := pFgg.GetDecls()
 	pOblit := fgr.Obliterate(pFgg)
 	VPrintln(verbose, "Oblit expr: "+pOblit.GetMain().String())
-	t := pOblit.Ok(false).(fgr.Type)
+	t, pOblit := castFGR( pOblit.Ok(false, base.CHECK) )
 	dsOblit := pOblit.GetDecls()
 	VPrintln(verbose, "FGG type="+u.String()+", FGR type="+t.String())
 
@@ -316,7 +275,7 @@ func testOblitStep(verbose bool, pFgg fgg.FGGProgram,
 	pFgg1, _ := pFgg.Eval()
 	VPrintln(verbose, "\nEval FGG one step: "+
 		pFgg1.GetMain().String())
-	u1 := pFgg1.Ok(true).(fgg.Type)    // TNamed, except TParam for primitives (string)
+	u1, pFgg1 := castFGG( pFgg1.Ok(true, base.CHECK) )
 	if !u1.Impls(pFgg.GetDecls(), u) { // TODO: factor out with eval
 		panic("-test-monom failed: type not preserved\n\tprev=" + u.String() +
 			"\n\tnext=" + u1.String())

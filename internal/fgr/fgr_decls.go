@@ -44,7 +44,7 @@ var _ FGRNode = FGRProgram{}
 func (p FGRProgram) GetDecls() []Decl   { return p.decls } // Return a copy?
 func (p FGRProgram) GetMain() base.Expr { return p.e_main }
 
-func (p FGRProgram) Ok(allowStupid bool) base.Type {
+func (p FGRProgram) Ok(allowStupid bool, mode base.TypingMode) (base.Type, base.Program) {
 	if !allowStupid { // Hack, to print the following only for "top-level" programs (not during Eval)
 		/*fmt.Println("[Warning] Type/method decl OK not fully checked yet " +
 		"(e.g., distinct field/param names, etc.)")*/
@@ -77,7 +77,7 @@ func (p FGRProgram) Ok(allowStupid bool) base.Type {
 		}
 	}
 	var gamma Gamma // Empty env for main
-	return p.e_main.Typing(p.decls, gamma, allowStupid)
+	return p.e_main.Typing(p.decls, gamma, allowStupid), p
 }
 
 // CHECKME: resulting FGRProgram is not parsed from source, OK? -- cf. Expr.Eval

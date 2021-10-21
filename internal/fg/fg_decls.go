@@ -51,7 +51,7 @@ func (p FGProgram) GetMain() base.Expr { return p.e_main }
 func (p FGProgram) IsPrintf() bool     { return p.printf } // HACK
 
 // From base.Program
-func (p FGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
+func (p FGProgram) Ok(allowStupid bool, _mode base.TypingMode) (base.Type, base.Program) {
 	tds := make(map[string]TypeDecl) // Type name
 	mds := make(map[string]MethDecl) // Hack, string = string(md.recv.t) + "." + md.name
 	for _, v := range p.decls {

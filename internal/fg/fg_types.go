@@ -8,11 +8,12 @@ import (
 
 /* Export */
 
-func NewTNamed(t Name) TNamed              { return TNamed(t) }
-func NewTPrimitive(t Tag) TPrimitive       { return TPrimitive{t, false} }
-func NewUndefTPrimitive(t Tag) TPrimitive  { return TPrimitive{t, true} }
-func NewSTypeLit(fds []FieldDecl) STypeLit { return STypeLit{fds} }
-func NewITypeLit(ss []Spec) ITypeLit       { return ITypeLit{ss} }
+func NewTNamed(t Name) TNamed                    { return TNamed(t) }
+func NewITypeLit(ss []Spec) ITypeLit             { return ITypeLit{ss} }
+func NewSTypeLit(fds []FieldDecl) STypeLit       { return STypeLit{fds} }
+func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
+func NewDefTPrimitive(t Tag) TPrimitive          { return TPrimitive{t, false} }
+func NewUndefTPrimitive(t Tag) TPrimitive        { return TPrimitive{t, true} }
 
 /******************************************************************************/
 /* Named (defined) types */

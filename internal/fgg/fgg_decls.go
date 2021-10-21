@@ -70,7 +70,7 @@ func (p FGGProgram) GetDecls() []Decl   { return p.decls } // Return a copy?
 func (p FGGProgram) GetMain() base.Expr { return p.e_main }
 func (p FGGProgram) IsPrintf() bool     { return p.printf } // HACK
 
-func (p FGGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
+func (p FGGProgram) Ok(allowStupid bool, mode base.TypingMode) (base.Type, base.Program) {
 	tds := make(map[string]TypeDecl) // Type name
 	mds := make(map[string]MethDecl) // Hack, string = md.recv.t + "." + md.name
 	for _, v := range p.decls {
@@ -84,7 +84,11 @@ func (p FGGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
 			}
 			tds[t] = d
 		case MethDecl:
-			d.Ok(p.decls)
+			if mode == base.CHECK {
+				d.Ok(p.decls)
+			} else if mode == base.INFER {
+				d.OkInfer(p.decls)
+			}
 			hash := string(d.t_recv) + "." + d.name
 			if _, ok := mds[hash]; ok {
 				panic("Multiple declarations for receiver " + string(d.t_recv) +
@@ -99,8 +103,14 @@ func (p FGGProgram) Ok(allowStupid bool) (base.Type, base.Program) {
 	// Empty envs for main
 	var delta Delta
 	var gamma Gamma
-	typ, ast := p.e_main.Typing(p.decls, delta, gamma, allowStupid)
-	return typ, FGGProgram{p.decls, ast, p.printf}
+	var typ Type
+	e_main := p.e_main
+	if mode == base.CHECK {
+		typ, e_main = p.e_main.Typing(p.decls, delta, gamma, allowStupid)
+	} else if mode == base.INFER {
+		typ = p.e_main.Infer(p.decls, delta, gamma) // TODO should return the same Ast or an annotated one?
+	}
+	return typ, FGGProgram{p.decls, e_main, p.printf}
 }
 
 func (p FGGProgram) Eval() (base.Program, string) {
@@ -157,6 +167,30 @@ func (md MethDecl) GetReturn() Type            { return md.u_ret }
 func (md MethDecl) GetBody() FGGExpr           { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
+
+	delta, gamma := md.okBase(ds)
+	allowStupid := false
+	// don't care about 'ast' returned from typing of method body -- only from method Call
+	u, _ := md.e_body.Typing(ds, delta, gamma, allowStupid)
+
+	/*fmt.Println("a:", u)
+	fmt.Println("b:", md.u_ret)
+	fmt.Println("c:", u.ImplsDelta(ds, delta, md.u_ret))*/
+
+	if !u.ImplsDelta(ds, delta, md.u_ret) {
+		panic("Method body type must implement declared return type: found=" +
+			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
+	}
+}
+
+func (md MethDecl) OkInfer(ds []Decl) {
+	delta, gamma := md.okBase(ds)
+
+	u := md.e_body.Infer(ds, delta, gamma)
+	NewSubtypeConstr(u, md.u_ret).Unify(ds, delta) // todo maybe handle the error?
+}
+
+func (md MethDecl) okBase(ds []Decl) (Delta, Gamma) {
 	// (type t_S(Phi') T ) ∈ D
 	recv_decl := getTDecl(ds, md.t_recv) // panics if not found
 	if isIfaceType(ds, recv_decl.GetSourceType()) {
@@ -201,18 +235,8 @@ func (md MethDecl) Ok(ds []Decl) {
 		gamma[v.name] = v.u
 	}
 	md.u_ret.Ok(ds, delta)
-	allowStupid := false
-	// don't care about 'ast' returned from typing of method body -- only from method Call
-	u, _ := md.e_body.Typing(ds, delta, gamma, allowStupid)
 
-	/*fmt.Println("a:", u)
-	fmt.Println("b:", md.u_ret)
-	fmt.Println("c:", u.ImplsDelta(ds, delta, md.u_ret))*/
-
-	if !u.ImplsDelta(ds, delta, md.u_ret) {
-		panic("Method body type must implement declared return type: found=" +
-			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
-	}
+	return delta, gamma
 }
 
 func (md MethDecl) ToSig() Sig {
@@ -273,12 +297,12 @@ func (g Sig) GetReturn() Type            { return g.u_ret }
 
 //func (g Sig) TSubs(subs map[TParam]Type) Sig {
 // Only makes sense to have SubsEtaOpen, as eta will never contain mappings
-// for the type vars belonging to g.Psi. TODO why is that?
+// for the type vars belonging to g.Psi. TODO this is not true!!! cf. internal/frontend/Frontend.go#renameParams
 // The parameters are only fully instantiated in monomSig1 [fgg_monom.go]
 func (g Sig) SubsEtaOpen(eta EtaOpen) Sig {
 	tfs := make([]TFormal, len(g.Psi.tFormals))
 	for i, tf := range g.Psi.tFormals {
-		tfs[i] = TFormal{tf.name, tf.u_I.SubsEtaOpen(eta)}
+		tfs[i] = tf.SubsEtaOpen(eta)
 	}
 	ps := make([]ParamDecl, len(g.pDecls))
 	for i, pd := range g.pDecls {
@@ -290,8 +314,9 @@ func (g Sig) SubsEtaOpen(eta EtaOpen) Sig {
 
 func (g Sig) Ok(ds []Decl, env Delta) {
 	g.Psi.Ok(ds, env)
+	extendedEnv := env.Clone()
 	for _, v := range g.Psi.tFormals {
-		env[v.name] = v.u_I
+		extendedEnv[v.name] = v.u_I
 	}
 	seen := make(map[Name]ParamDecl)
 	for _, v := range g.pDecls {
@@ -299,9 +324,9 @@ func (g Sig) Ok(ds []Decl, env Delta) {
 			panic("Duplicate variable name " + v.name + ":\n\t" + g.String())
 		}
 		seen[v.name] = v
-		v.u.Ok(ds, env)
+		v.u.Ok(ds, extendedEnv)
 	}
-	g.u_ret.Ok(ds, env)
+	g.u_ret.Ok(ds, extendedEnv)
 }
 
 func (g Sig) GetSigs(_ []Decl) []Sig {

@@ -53,19 +53,20 @@ type BigPsi struct {
 func (Psi BigPsi) GetTFormals() []TFormal { return Psi.tFormals }
 
 func (Psi BigPsi) Ok(ds []Decl, env Delta) {
+	extendedEnv := env.Clone()
 	for _, v := range Psi.tFormals {
-		if _, ok := env[v.name]; ok {
+		if _, ok := extendedEnv[v.name]; ok {
 			panic("Duplicate param name " + string(v.name) + " under context: " +
 				env.String() + "\n\t" + Psi.String())
 		}
-		env[v.name] = v.u_I
+		extendedEnv[v.name] = v.u_I
 	} // Delta built
 	for _, v := range Psi.tFormals {
 		if !isIfaceType(ds, v.u_I) {
 			panic("Upper bound must be an interface type: not " + v.u_I.String() +
 				"\n\t" + Psi.String())
 		}
-		v.u_I.Ok(ds, env) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
+		v.u_I.Ok(ds, extendedEnv) // Checks params bound under env -- N.B. can forward ref (not restricted left-to-right)
 	}
 }
 
@@ -114,6 +115,10 @@ func (tf TFormal) GetUpperBound() Type { return tf.u_I }
 
 func (tf TFormal) String() string {
 	return string(tf.name) + " " + tf.u_I.String()
+}
+
+func (tf TFormal) SubsEtaOpen(eta EtaOpen) TFormal {
+	return TFormal{tf.name.SubsEtaOpen(eta).(TParam), tf.u_I.SubsEtaOpen(eta)}
 }
 
 // Type actuals
@@ -169,6 +174,16 @@ func (delta Delta) String() string {
 		res = k.String() + ":" + v.String()
 	}
 	return res + "]"
+}
+
+// Deltas should be treated immutably, hence one must clone the current
+// environment (Delta) in order to add new mappings to it.
+func (delta Delta) Clone() Delta {
+	clone := make(Delta)
+	for param, bound := range delta {
+		clone[param] = bound
+	}
+	return clone
 }
 
 // Pre: len(psi) == len(Psi.GetTFormals()); psi all ground
@@ -229,6 +244,9 @@ type FGGExpr interface {
 	// gamma and delta should be treated immutably
 	Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr)
 	Eval(ds []Decl) (FGGExpr, string)
+
+	Infer(ds []Decl, delta Delta, gamma Gamma) Type // todo retornar um Delta que representa bounds de TVar ainda nao unificada
+
 }
 
 /* Helpers */

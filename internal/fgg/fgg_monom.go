@@ -17,7 +17,8 @@ var _ = fmt.Errorf
 /* Export */
 
 func ToMonomId(u Type) fg.Type {
-	return toMonomId(u.(TNamed))
+	//return toMonomId(u.(TNamed))
+	return monomType(u, nil, nil, Omega{})
 }
 
 //func MonomExpr(e FGGExpr) fg.FGExpr {
@@ -89,7 +90,7 @@ func monomType(fgg_type Type, eta EtaClosed, mu Mu, omega Omega) fg.Type {
 		subs := t.SubsEtaClosed(eta)
 		return monomType(subs, eta, nil, omega)
 	case TPrimitive:
-		return fg.NewTPrimitive(fg.Tag(t.tag))
+		return fg.NewTPrimitive(fg.Tag(t.tag), t.undefined)
 	case TNamed:
 		return monomTNamed(t, eta)
 	case STypeLit:
@@ -310,7 +311,7 @@ func toMonomId(u TNamed) fg.TNamed {
 	res = strings.Replace(res, "(", "<", -1)
 	res = strings.Replace(res, ")", ">", -1)
 	res = strings.Replace(res, " ", "", -1)
-	return fg.TNamed(res)
+	return fg.NewTNamed(res)
 }
 
 // !!! CHECKME: psi should already be grounded, eta unnecessary?

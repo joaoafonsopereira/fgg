@@ -141,7 +141,8 @@ test-fg-examples-against-go:
 
 
 .PHONY: test-fgg
-test-fgg: test-fgg-unit test-fgg-examples test-nomono-bad simulate-monom simulate-oblit
+#test-fgg: test-fgg-unit test-fgg-examples test-nomono-bad simulate-monom simulate-oblit
+test-fgg: test-fgg-unit test-fgg-examples test-nomono-bad simulate-monom
 #test-fgg-examples executes nomono examples (e.g., oopsla20/fig10/nomono.fgg)
 
 
