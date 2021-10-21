@@ -10,10 +10,11 @@ import (
 
 func NewTParam(name Name) TParam                      { return TParam(name) }
 func NewTNamed(t Name, us []Type) TNamed              { return TNamed{t, us} }
-func NewTPrimitive(t Tag) TPrimitive                  { return TPrimitive{t, false} }
-func NewUndefTPrimitive(t Tag) TPrimitive             { return TPrimitive{t, true} }
 func NewSTypeLit(fds []FieldDecl) STypeLit            { return STypeLit{fds} }
 func NewITypeLit(specs []Spec, tlist []Type) ITypeLit { return ITypeLit{specs, tlist} }
+func NewTPrimitive(t Tag, undef bool) TPrimitive      { return TPrimitive{t, undef} }
+func NewDefTPrimitive(t Tag) TPrimitive               { return TPrimitive{t, false} }
+func NewUndefTPrimitive(t Tag) TPrimitive             { return TPrimitive{t, true} }
 
 func NewTypeList(tlist []Type) TypeList { return tlist }
 
@@ -148,7 +149,7 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 		}
 	case ITypeLit:
 		if u.HasTList() {
-			tlist := u.GetTList(ds)
+			tlist := u.FlatTList(ds)
 			if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // TODO initial version; not accounting for https://github.com/golang/go/issues/45346
 				return false
 			}
@@ -291,7 +292,7 @@ func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 		return isIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
 	case ITypeLit:
 		if u_cast.HasTList() {
-			if !(u_cast.GetTList(ds).Contains(t0)) {
+			if !(u_cast.FlatTList(ds).Contains(t0)) {
 				return false
 			}
 		}
@@ -313,7 +314,7 @@ func (t0 TPrimitive) canConvertTo(ds []Decl, delta Delta, u Type) bool {
 		return t0.canConvertTo(ds, delta, constraint) // falls into case below
 	case ITypeLit:
 		if under.HasTList() {
-			for _, u2 := range under.GetTList(ds) {
+			for _, u2 := range under.FlatTList(ds) {
 				if !t0.canConvertTo(ds, delta, u2) {
 					return false
 				}
@@ -498,6 +499,7 @@ type ITypeLit struct {
 var _ Type = ITypeLit{}
 
 func (i ITypeLit) GetSpecs() []Spec { return i.specs }
+func (i ITypeLit) TList() TypeList  { return i.tlist }
 func (i ITypeLit) HasTList() bool {
 	return i.tlist != nil && len(i.tlist) > 0
 }
@@ -506,13 +508,13 @@ func (i ITypeLit) HasTList() bool {
 // the final constraint is the intersection of all the type lists involved.
 // If there are multiple embedded types, intersection preserves the property
 // that any type argument must satisfy the requirements of all embedded types.
-func (i ITypeLit) GetTList(ds []Decl) TypeList {
+func (i ITypeLit) FlatTList(ds []Decl) TypeList {
 	res := i.tlist
 	for _, spec := range i.specs {
 		if emb, ok := spec.(TNamed); ok {
 			emb_under := emb.Underlying(ds).(ITypeLit) // checked in ok
 			if emb_under.HasTList() {
-				res = res.intersect(emb_under.GetTList(ds))
+				res = res.intersect(emb_under.FlatTList(ds))
 			}
 		}
 	}

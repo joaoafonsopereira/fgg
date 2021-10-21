@@ -141,7 +141,8 @@ func (x StringVal) Val() interface{}             { return x.val }
 // Represents a literal whose type is still undefined
 //  (e.g. 123 is 'assignable' to either int32, int64 or MyInt, but the type is
 //        only determined upon 'assignment')
-// An int/float payload is saved as int64/float64.
+// An int/float payload is saved as int64/float64
+// -> we don't support arbitrary precision numerical constants as found in Go.
 type PrimitiveLiteral struct {
 	payload interface{}
 	tag     Tag
@@ -479,7 +480,7 @@ func evalPrimtPredicate(ds []Decl, delta Delta, pred PrimtPredicate, u Type) boo
 		// in its type list satisfies the pred
 		if under.HasTList() {
 			res := true
-			for _, u2 := range under.GetTList(ds) {
+			for _, u2 := range under.FlatTList(ds) {
 				res = evalPrimtPredicate(ds, delta, pred, u2) && res
 			}
 			return res

@@ -57,7 +57,7 @@ func Eval(intrp Interp, steps int) base.Type {
 	}
 	p_init := intrp.GetProgram()
 	allowStupid := true
-	t_init := p_init.Ok(allowStupid)
+	t_init, p_init := p_init.Ok(allowStupid, base.CHECK)
 	intrp.VPrintln("\nEntering Eval loop:")
 	intrp.VPrintln("Decls:")
 	ds := p_init.GetDecls()
@@ -78,7 +78,7 @@ func Eval(intrp Interp, steps int) base.Type {
 		intrp.SetProgram(p)
 		intrp.VPrintln(fmt.Sprintf("%6d: %8s %v", i, "["+rule+"]", p.GetMain()))
 		intrp.VPrint("Checking OK:") // TODO: maybe disable by default, enable by flag
-		t = p.Ok(allowStupid)
+		t, p = p.Ok(allowStupid, base.CHECK)
 		intrp.VPrintln(" " + t.String())
 		if !t.Impls(ds, t_init) { // Check type preservation
 			panic("Type not preserved by evaluation.")
@@ -108,7 +108,7 @@ func NewFGInterp(verbose bool, src string, strict bool) *FGInterp {
 
 	VPrintln(verbose, "\nChecking source program OK:")
 	allowStupid := false
-	orig.Ok(allowStupid)
+	orig.Ok(allowStupid, base.CHECK)
 
 	prog := fg.NewFGProgram(orig.GetDecls(), orig.GetMain().(fg.FGExpr), orig.IsPrintf())
 	return &FGInterp{verboseHelper{verbose}, orig, prog}
@@ -163,7 +163,7 @@ func NewFGGInterp(verbose bool, src string, strict bool) *FGGInterp {
 
 	VPrintln(verbose, "\nChecking source program OK:")
 	allowStupid := false
-	renamed.Ok(allowStupid)
+	renamed.Ok(allowStupid, base.CHECK)
 
 	prog := fgg.NewProgram(renamed.GetDecls(), renamed.GetMain().(fgg.FGGExpr),
 		renamed.IsPrintf())
@@ -232,7 +232,7 @@ func (intrp *FGGInterp) Oblit(compile string) {
 	}
 
 	// cf. interp -- TODO: factor out with others
-	p_fgr.Ok(false)
+	p_fgr.Ok(false, base.CHECK)
 	if OblitEvalSteps > NO_EVAL {
 		/*intrp.VPrint("\nEvaluating FGR:") // eval prints a leading "\n"
 		intrp_fgr := NewFGRInterp(Verbose, p_fgr)
@@ -254,16 +254,22 @@ func renameParams(p fgg.FGGProgram) fgg.FGGProgram {
 
 func renameParamsDecl(p fgg.Decl) fgg.Decl {
 	switch d := p.(type) {
-	case fgg.STypeLit:
-		return d
-	case fgg.ITypeLit:
-		return renameParamsITypeLit(d)
+	case fgg.TypeDecl:
+		return renameParamsTypeDecl(d)
 	case fgg.MethDecl:
 		return renameParamsMethDecl(d)
 	default:
 		panic("Unknown Decl type: " + reflect.TypeOf(d).String() +
 			"\n\t" + d.String())
 	}
+}
+
+func renameParamsTypeDecl(td fgg.TypeDecl) fgg.TypeDecl {
+	if u_I, ok := td.GetSourceType().(fgg.ITypeLit); ok {
+		renamed := renameParamsITypeLit(u_I)
+		return fgg.NewTypeDecl(td.GetName(), td.GetBigPsi(), renamed)
+	}
+	return td
 }
 
 func renameParamsITypeLit(c fgg.ITypeLit) fgg.ITypeLit {
@@ -275,13 +281,13 @@ func renameParamsITypeLit(c fgg.ITypeLit) fgg.ITypeLit {
 			ss[i] = s
 		case fgg.Sig:
 			subs := makeParamIndexSubs(s.Psi)
-			ss[i] = s.TSubs(subs)
+			ss[i] = s.SubsEtaOpen(subs)
 		default:
 			panic("Unknown Spec type: " + reflect.TypeOf(s).String() +
 				"\n\t" + s.String())
 		}
 	}
-	return fgg.NewITypeLit(c.GetName(), c.Psi, ss)
+	return fgg.NewITypeLit(ss, c.TList())
 }
 
 func renameParamsMethDecl(m fgg.MethDecl) fgg.MethDecl {
@@ -289,19 +295,22 @@ func renameParamsMethDecl(m fgg.MethDecl) fgg.MethDecl {
 	tfs_orig := m.Psi_meth.GetTFormals()
 	tfs := make([]fgg.TFormal, len(tfs_orig))
 	for i, v := range tfs_orig {
-		tfs[i] = fgg.NewTFormal(v.GetTParam().TSubs(subs).(fgg.TParam), v.GetUpperBound().TSubs(subs))
+		//tfs[i] = fgg.NewTFormal(v.GetTParam().SubsEtaOpen(subs).(fgg.TParam), v.GetUpperBound().SubsEtaOpen(subs))
+		tfs[i] = v.SubsEtaOpen(subs)
 	}
 	Psi_meth := fgg.NewBigPsi(tfs)
 	pds_orig := m.GetParamDecls()
 	pds := make([]fgg.ParamDecl, len(pds_orig))
 	for i, v := range pds_orig {
-		pds[i] = fgg.NewParamDecl(v.GetName(), v.GetType().TSubs(subs))
+		pds[i] = fgg.NewParamDecl(v.GetName(), v.GetType().SubsEtaOpen(subs))
 	}
-	return fgg.NewMethDecl(m.GetRecvName(), m.GetRecvTypeName(), m.Psi_recv, m.GetName(), Psi_meth, pds, m.GetReturn().TSubs(subs), m.GetBody().TSubs(subs))
+	return fgg.NewMethDecl(m.GetRecvName(), m.GetRecvTypeName(), m.Psi_recv,
+		m.GetName(), Psi_meth, pds, m.GetReturn().SubsEtaOpen(subs),
+		m.GetBody().TSubs(subs))
 }
 
-func makeParamIndexSubs(Psi fgg.BigPsi) fgg.Delta {
-	subs := make(fgg.Delta)
+func makeParamIndexSubs(Psi fgg.BigPsi) fgg.EtaOpen {
+	subs := make(fgg.EtaOpen)
 	tfs := Psi.GetTFormals()
 	for j := 0; j < len(tfs); j++ {
 		subs[tfs[j].GetTParam()] = fgg.TParam("β" + strconv.Itoa(j+1)) // β for add meth params

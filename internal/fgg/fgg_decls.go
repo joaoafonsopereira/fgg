@@ -297,12 +297,12 @@ func (g Sig) GetReturn() Type            { return g.u_ret }
 
 //func (g Sig) TSubs(subs map[TParam]Type) Sig {
 // Only makes sense to have SubsEtaOpen, as eta will never contain mappings
-// for the type vars belonging to g.Psi. TODO why is that?
+// for the type vars belonging to g.Psi. TODO this is not true!!! cf. internal/frontend/Frontend.go#renameParams
 // The parameters are only fully instantiated in monomSig1 [fgg_monom.go]
 func (g Sig) SubsEtaOpen(eta EtaOpen) Sig {
 	tfs := make([]TFormal, len(g.Psi.tFormals))
 	for i, tf := range g.Psi.tFormals {
-		tfs[i] = TFormal{tf.name, tf.u_I.SubsEtaOpen(eta)}
+		tfs[i] = tf.SubsEtaOpen(eta)
 	}
 	ps := make([]ParamDecl, len(g.pDecls))
 	for i, pd := range g.pDecls {
@@ -314,8 +314,9 @@ func (g Sig) SubsEtaOpen(eta EtaOpen) Sig {
 
 func (g Sig) Ok(ds []Decl, env Delta) {
 	g.Psi.Ok(ds, env)
+	extendedEnv := env.Clone()
 	for _, v := range g.Psi.tFormals {
-		env[v.name] = v.u_I
+		extendedEnv[v.name] = v.u_I
 	}
 	seen := make(map[Name]ParamDecl)
 	for _, v := range g.pDecls {
@@ -323,9 +324,9 @@ func (g Sig) Ok(ds []Decl, env Delta) {
 			panic("Duplicate variable name " + v.name + ":\n\t" + g.String())
 		}
 		seen[v.name] = v
-		v.u.Ok(ds, env)
+		v.u.Ok(ds, extendedEnv)
 	}
-	g.u_ret.Ok(ds, env)
+	g.u_ret.Ok(ds, extendedEnv)
 }
 
 func (g Sig) GetSigs(_ []Decl) []Sig {

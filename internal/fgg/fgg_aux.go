@@ -14,20 +14,6 @@ func Fields(ds []Decl, u_S TNamed) []FieldDecl { return fields(ds, u_S) }
 func Methods(ds []Decl, u Type) map[Name]Sig   { return methods(ds, u) }
 func GetTDecl(ds []Decl, t Name) TypeDecl      { return getTDecl(ds, t) }
 
-// MethodSet - aux type to represent the result of Methods.
-// Makes it easier/more readable to check for superset relation
-type MethodSet map[Name]Sig
-
-func (m0 MethodSet) IsSupersetOf(m MethodSet) bool {
-	for k, g := range m {
-		g0, ok := m0[k]
-		if !ok || !sigAlphaEquals(g0, g) {
-			return false
-		}
-	}
-	return true
-}
-
 /* bounds(delta, u), fields(u_S), methods(u), body(u_S, m) */
 
 // return type TName?
@@ -40,22 +26,12 @@ func bounds(delta Delta, u Type) Type {
 	return u // CHECKME: submission version, includes when TParam 'a' not in delta, correct?
 }
 
-// Pre: len(s.psi.as) == len (u_S.typs), where s is the STypeLit decl for u_S.t
-
-// TODO IS THIS FUNCTION NEEDED? THE TYPE SUBS is already being applied in u_S.Underlying()
 func fields(ds []Decl, u_S TNamed) []FieldDecl {
 	s, ok := u_S.Underlying(ds).(STypeLit)
 	if !ok {
 		panic("Not a struct type: " + u_S.String())
 	}
-
-	decl := getTDecl(ds, u_S.t_name)
-	eta := MakeEtaOpen(decl.Psi, u_S.u_args) // TODO CHECKME: this subst is redundant after calling underlying
-	fds := make([]FieldDecl, len(s.fDecls))
-	for i := 0; i < len(s.fDecls); i++ {
-		fds[i] = s.fDecls[i].SubsEtaOpen(eta)
-	}
-	return fds
+	return s.GetFieldDecls()
 }
 
 // Go has no overloading, meth names are a unique key
@@ -147,26 +123,20 @@ func dynamicType(e FGGExpr) Type {
 	panic("dynamicType: expression is not a value: " + e.String())
 }
 
-/* Additional */
+/* MethodSet; alpha-equality of signatures */
 
-func getTDecl(ds []Decl, t Name) TypeDecl {
-	for _, v := range ds {
-		td, ok := v.(TypeDecl)
-		if ok && td.GetName() == t {
-			return td
+// MethodSet - aux type to represent the result of Methods.
+// Makes it easier/more readable to check for superset relation
+type MethodSet map[Name]Sig
+
+func (m0 MethodSet) IsSupersetOf(m MethodSet) bool {
+	for name, g := range m {
+		g0, ok := m0[name]
+		if !ok || !sigAlphaEquals(g0, g) {
+			return false
 		}
 	}
-	panic("Type not found: " + t)
-}
-
-func getMethDecl(ds []Decl, recv Name, m Name) MethDecl {
-	for _, d := range ds {
-		md, ok := d.(MethDecl)
-		if ok && md.t_recv == recv && md.name == m {
-			return md
-		}
-	}
-	panic("Method not found: " + recv + "." + m)
+	return true
 }
 
 // !!! Sig in FGG includes ~a and ~x, which naively breaks "impls"
@@ -200,4 +170,26 @@ func makeParamIndexSubs(Psi BigPsi) EtaOpen {
 		subs[Psi.tFormals[j].name] = TParam("α" + strconv.Itoa(j+1))
 	}
 	return subs
+}
+
+/* Additional */
+
+func getTDecl(ds []Decl, t Name) TypeDecl {
+	for _, v := range ds {
+		td, ok := v.(TypeDecl)
+		if ok && td.GetName() == t {
+			return td
+		}
+	}
+	panic("Type not found: " + t)
+}
+
+func getMethDecl(ds []Decl, recv Name, m Name) MethDecl {
+	for _, d := range ds {
+		md, ok := d.(MethDecl)
+		if ok && md.t_recv == recv && md.name == m {
+			return md
+		}
+	}
+	panic("Method not found: " + recv + "." + m)
 }

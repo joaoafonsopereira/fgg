@@ -86,7 +86,7 @@ func (a *FGGAdaptor) ExitTypeName(ctx *parser.TypeNameContext) {
 
 func (a *FGGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
 	tag := fgg.TagFromName(ctx.GetName().GetText())
-	a.push(fgg.NewTPrimitive(tag))
+	a.push(fgg.NewDefTPrimitive(tag))
 }
 
 func (a *FGGAdaptor) ExitTypeLit_(ctx *parser.TypeLit_Context) {

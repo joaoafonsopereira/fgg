@@ -42,20 +42,23 @@ func Obliterate(p_fgg fgg.FGGProgram) FGRProgram { // CHECKME can also subsume e
 	for i := 0; i < len(ds_fgg); i++ {
 		d_fgg := ds_fgg[i]
 		switch d := d_fgg.(type) {
-		case fgg.STypeLit:
-			recv_getRep := NewParamDecl("x0", Type(d.GetName())) // TODO: factor out constant
-			t_S := d.GetName()
-			tfs := d.GetBigPsi().GetTFormals()
-			es := make([]FGRExpr, len(tfs))
-			for i := 0; i < len(es); i++ {
-				es[i] = NewSelect(NewVariable("x0"), tfs[i].GetTParam().String())
-			}
-			e_getRep := TRep{Name(t_S), es} // TODO: New constructor
-			getRep := NewMDecl(recv_getRep, GET_REP /*[]RepDecl{},*/, []ParamDecl{},
-				RepType, e_getRep) // TODO: factor out constants
-			ds_fgr = append(ds_fgr, oblitSTypeLit(d), getRep)
-		case fgg.ITypeLit:
-			ds_fgr = append(ds_fgr, oblitITypeLit(d))
+		//case fgg.STypeLit:
+		//	recv_getRep := NewParamDecl("x0", Type(d.GetName())) // TODO: factor out constant
+		//	t_S := d.GetName()
+		//	tfs := d.GetBigPsi().GetTFormals()
+		//	es := make([]FGRExpr, len(tfs))
+		//	for i := 0; i < len(es); i++ {
+		//		es[i] = NewSelect(NewVariable("x0"), tfs[i].GetTParam().String())
+		//	}
+		//	e_getRep := TRep{Name(t_S), es} // TODO: New constructor
+		//	getRep := NewMDecl(recv_getRep, GET_REP /*[]RepDecl{},*/, []ParamDecl{},
+		//		RepType, e_getRep) // TODO: factor out constants
+		//	ds_fgr = append(ds_fgr, oblitSTypeLit(d), getRep)
+		//case fgg.ITypeLit:
+		//	ds_fgr = append(ds_fgr, oblitITypeLit(d))
+
+		case fgg.TypeDecl:
+			ds_fgr = append(ds_fgr, oblitTDecl(ds_fgg, d))
 		case fgg.MethDecl:
 			ds_fgr = append(ds_fgr, oblitMDecl(ds_fgg, d))
 		default:
@@ -67,42 +70,46 @@ func Obliterate(p_fgg fgg.FGGProgram) FGRProgram { // CHECKME can also subsume e
 	return NewFGRProgram(ds_fgr, e_fgr)
 }
 
+func oblitTDecl(ds_fgg []Decl, d fgg.TypeDecl) TDecl {
+	return STypeLit{}
+}
+
 /* Obliterate STypeLit, ITypeLit, Sig */
 
-func oblitSTypeLit(s fgg.STypeLit) STypeLit {
-	t := Type(s.GetName())
-	psi := s.GetBigPsi()
-	tfs := psi.GetTFormals()
-	fds_fgg := s.GetFieldDecls()
-	fds_fgr := make([]FieldDecl, len(tfs)+len(fds_fgg))
-	for i := 0; i < len(tfs); i++ {
-		fds_fgr[i] = NewFieldDecl(tfs[i].GetTParam().String(), RepType)
-	}
-	delta := psi.ToDelta()
-	for i := 0; i < len(fds_fgg); i++ {
-		fd_fgg := fds_fgg[i]
-		erased := toFgrTypeFromBounds(delta, fd_fgg.GetType())
-		fds_fgr[len(tfs)+i] = NewFieldDecl(fd_fgg.GetName(), erased)
-	}
-	return NewSTypeLit(t /*rds,*/, fds_fgr)
-}
-
-func oblitITypeLit(c fgg.ITypeLit) ITypeLit {
-	t := Type(c.GetName())
-	ss_fgg := c.GetSpecs()
-	ss_fgr := make([]Spec, 1+len(ss_fgg))
-	ss_fgr[0] = Type(HAS_REP) // TODO: add HasRep to decls -- and factor out constant
-	for i := 0; i < len(ss_fgg); i++ {
-		s_fgg := ss_fgg[i]
-		switch s := s_fgg.(type) {
-		case fgg.Type:
-			panic("[TODO]: " + s.String()) // !!!
-		case fgg.Sig:
-			ss_fgr[i+1] = oblitSig(s)
-		}
-	}
-	return NewITypeLit(t, ss_fgr)
-}
+//func oblitSTypeLit(s fgg.STypeLit) STypeLit {
+//	t := Type(s.GetName())
+//	psi := s.GetBigPsi()
+//	tfs := psi.GetTFormals()
+//	fds_fgg := s.GetFieldDecls()
+//	fds_fgr := make([]FieldDecl, len(tfs)+len(fds_fgg))
+//	for i := 0; i < len(tfs); i++ {
+//		fds_fgr[i] = NewFieldDecl(tfs[i].GetTParam().String(), RepType)
+//	}
+//	delta := psi.ToDelta()
+//	for i := 0; i < len(fds_fgg); i++ {
+//		fd_fgg := fds_fgg[i]
+//		erased := toFgrTypeFromBounds(delta, fd_fgg.GetType())
+//		fds_fgr[len(tfs)+i] = NewFieldDecl(fd_fgg.GetName(), erased)
+//	}
+//	return NewSTypeLit(t /*rds,*/, fds_fgr)
+//}
+//
+//func oblitITypeLit(c fgg.ITypeLit) ITypeLit {
+//	t := Type(c.GetName())
+//	ss_fgg := c.GetSpecs()
+//	ss_fgr := make([]Spec, 1+len(ss_fgg))
+//	ss_fgr[0] = Type(HAS_REP) // TODO: add HasRep to decls -- and factor out constant
+//	for i := 0; i < len(ss_fgg); i++ {
+//		s_fgg := ss_fgg[i]
+//		switch s := s_fgg.(type) {
+//		case fgg.Type:
+//			panic("[TODO]: " + s.String()) // !!!
+//		case fgg.Sig:
+//			ss_fgr[i+1] = oblitSig(s)
+//		}
+//	}
+//	return NewITypeLit(t, ss_fgr)
+//}
 
 func oblitSig(g_fgg fgg.Sig) Sig {
 	m := g_fgg.GetMethod()
@@ -199,8 +206,8 @@ func oblitExpr(ds_fgg []Decl, delta fgg.Delta, gamma fgg.Gamma, e_fgg fgg.FGGExp
 		e_fgg := e.GetExpr() // Shadows original e_fgg
 		e_fgr := oblitExpr(ds_fgg, delta, gamma, e_fgg)
 		f := e.GetField()
-		u := e_fgg.Typing(ds_fgg, delta, gamma, true).(fgg.TNamed)
-		fds_fgg := fgg.Fields(ds_fgg, u)
+		u, _ := e_fgg.Typing(ds_fgg, delta, gamma, true)//.(fgg.TNamed)
+		fds_fgg := fgg.Fields(ds_fgg, u.(fgg.TNamed))
 		var u_f fgg.Type = nil
 		for _, fd_fgg := range fds_fgg {
 			if fd_fgg.GetName() == f {
@@ -233,7 +240,7 @@ func oblitExpr(ds_fgg []Decl, delta fgg.Delta, gamma fgg.Gamma, e_fgg fgg.FGGExp
 			es_fgr[len(targs)+i] = oblitExpr(ds_fgg, delta, gamma, es_fgg[i]) // !!!
 		}
 
-		u_recv := e_fgg.Typing(ds_fgg, delta, gamma, true)
+		u_recv, _ := e_fgg.Typing(ds_fgg, delta, gamma, true)
 
 		//g := fgg.Methods(ds_fgg, fgg.Bounds(delta, u_recv))[m]
 		g := fgg.MethodsDelta1(ds_fgg, delta, fgg.Bounds(delta, u_recv))[m]
@@ -242,7 +249,8 @@ func oblitExpr(ds_fgg []Decl, delta fgg.Delta, gamma fgg.Gamma, e_fgg fgg.FGGExp
 		for i := 0; i < len(targs); i++ {
 			tsubs[tfs[i].GetTParam()] = targs[i]
 		}
-		t_ret := toFgrTypeFromBounds(delta, g.GetReturn().TSubs(tsubs))
+		//t_ret := toFgrTypeFromBounds(delta, g.GetReturn().TSubs(tsubs))
+		t_ret := toFgrTypeFromBounds(delta, g.GetReturn().SubsEtaOpen(tsubs))
 
 		var res FGRExpr
 		res = NewCall(e_fgr, m, es_fgr)
@@ -276,7 +284,7 @@ func dtype(ds []Decl, delta fgg.Delta, gamma fgg.Gamma, d fgg.FGGExpr) fgg.Type 
 		return gamma[e.GetName()]
 	case fgg.StructLit:
 		t_S := e.GetNamedType().GetName()
-		td := fgg.GetTDecl(ds, t_S).(fgg.STypeLit)
+		td := fgg.GetTDecl(ds, t_S)//.(fgg.STypeLit)
 		tfs := td.GetBigPsi().GetTFormals()
 		us := make([]fgg.Type, len(tfs))
 		for i := 0; i < len(us); i++ {

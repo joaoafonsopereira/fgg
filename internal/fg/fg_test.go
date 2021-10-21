@@ -331,14 +331,6 @@ func Test016b(t *testing.T) {
 	fgParseAndOkBad(t, "Stupid cast on A struct lit", A, e)
 }
 
-// FIXME: should be a parser panic (lexing error, bad token), but currently caught as a typing panic
-func Test017(t *testing.T) {
-	Any := "type Any interface {}"
-	ToAny := "type ToAny struct { any Any }"
-	e := "ToAny{1}" // ANTLR "warning token recognition error at: '1'" -- need to escalate to strict
-	fgParseAndOkBad(t, "Bad token, \"1\"", Any, ToAny, e)
-}
-
 // Testing OK check for multiple declarations of a type/method name
 func Test018(t *testing.T) {
 	A := "type A struct {}"
