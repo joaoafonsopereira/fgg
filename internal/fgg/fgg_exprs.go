@@ -343,7 +343,7 @@ func (c Call) Eval(ds []Decl) (FGGExpr, string) {
 		return Call{c.e_recv, c.meth, c.t_args, args}, rule
 	}
 	// c.e and c.args all values
-	t := dynamicType(c.e_recv).(TNamed)
+	t := concreteType(c.e_recv).(TNamed)
 	x0, xs, e := body(ds, t, c.meth, c.t_args) // panics if method not found
 
 	subs := make(map[Variable]FGGExpr)
@@ -433,7 +433,7 @@ func (c Call) CanEval(ds []Decl) bool {
 			return false
 		}
 	}
-	u_S := dynamicType(c.e_recv).(TNamed)
+	u_S := concreteType(c.e_recv).(TNamed)
 	md := getMethDecl(ds, u_S.t_name, c.meth)
 	return len(md.Psi_recv.tFormals) == len(u_S.u_args) && // Needed, or also disregard?
 		len(md.Psi_meth.tFormals) == len(c.t_args) &&
@@ -491,7 +491,7 @@ func (a Assert) Eval(ds []Decl) (FGGExpr, string) {
 		e, rule := a.e_I.Eval(ds)
 		return Assert{e, a.u_cast}, rule
 	}
-	u_S := dynamicType(a.e_I)
+	u_S := concreteType(a.e_I)
 	if u_S.ImplsDelta(ds, make(Delta), a.u_cast) { // Empty Delta -- not super clear in submission version
 		return a.e_I, "Assert"
 	}
@@ -534,7 +534,7 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return dynamicType(a.e_I).Impls(ds, a.u_cast)
+	return concreteType(a.e_I).AssignableTo(ds, a.u_cast)
 }
 
 func (a Assert) String() string {

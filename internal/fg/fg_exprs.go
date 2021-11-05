@@ -304,7 +304,7 @@ func (c Call) Eval(ds []Decl) (FGExpr, string) {
 		return Call{c.e_recv, c.meth, args}, rule
 	}
 	// c.e and c.args all values
-	t := dynamicType(c.e_recv).(TNamed)
+	t := concreteType(c.e_recv).(TNamed)
 	x0, xs, e := body(ds, t, c.meth) // panics if method not found
 
 	subs := make(map[Variable]FGExpr)
@@ -370,7 +370,7 @@ func (c Call) CanEval(ds []Decl) bool {
 			return false
 		}
 	}
-	t_S := dynamicType(c.e_recv).(TNamed)
+	t_S := concreteType(c.e_recv).(TNamed)
 	md := getMethDecl(ds, t_S, c.meth)
 	return len(md.pDecls) == len(c.args) // Needed?
 }
@@ -418,7 +418,7 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 		e, rule := a.e_I.Eval(ds)
 		return Assert{e.(FGExpr), a.t_cast}, rule
 	}
-	t_S := dynamicType(a.e_I)
+	t_S := concreteType(a.e_I)
 	//if !isStructType(ds, t_S) { todo why this check??
 	//	panic("Non struct type found in struct lit: " + t_S.String())
 	//}
@@ -463,7 +463,7 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return dynamicType(a.e_I).Impls(ds, a.t_cast)
+	return concreteType(a.e_I).AssignableTo(ds, a.t_cast)
 }
 
 func (a Assert) String() string {

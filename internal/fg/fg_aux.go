@@ -76,16 +76,16 @@ func body(ds []Decl, t_S TNamed, m Name) (Name, []Name, FGExpr) {
 
 // Represents the aux function type() defined in fig.16 of the paper.
 // Returns the exact run-time type of a value expression.
-func dynamicType(e FGExpr) Type {
+func concreteType(e FGExpr) Type {
 	switch e1 := e.(type) {
 	case StructLit:
 		return e1.t_S
 	case NamedPrimitiveLiteral:
 		return e1.typ
 	case PrimtValue:
-		panic("dynamicType(PrimtValue) not defined") // todo <<<<--------------------
+		panic("concreteType(PrimtValue) not defined") // todo <<<<--------------------
 	}
-	panic("dynamicType: expression is not a value: " + e.String())
+	panic("concreteType: expression is not a value: " + e.String())
 }
 
 /* Additional */

@@ -50,7 +50,11 @@ type BaseBinaryOperation struct {
 
 func (b BaseBinaryOperation) IsValue() bool { return false }
 
-func (b BaseBinaryOperation) CanEval([]base.Decl) bool { return true }
+func (b BaseBinaryOperation) CanEval(ds []base.Decl) bool {
+	leftOk := b.left.IsValue() || b.left.CanEval(ds)
+	rightOk := b.right.IsValue() || b.right.CanEval(ds)
+	return leftOk && rightOk
+}
 
 func (b BaseBinaryOperation) String() string {
 	var sb strings.Builder
@@ -189,7 +193,7 @@ func (c Comparison) Eval(ds []Decl) (FGExpr, string) {
 
 	left, right := match(c.left, c.right) // panics if not able to match
 	res := rawBinop(left.Val(), right.Val(), c.op).(bool)
-	return BoolVal{res}, OpToRule[c.op]
+	return PrimitiveLiteral{res, BOOL}, OpToRule[c.op] // according to the spec, the result of a comparison is an "untyped" boolean
 }
 
 func (c Comparison) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
@@ -203,11 +207,11 @@ func (c Comparison) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGEx
 		panic("operator " + string(c.op) + " not defined for type: " + ltype.String())
 	}
 
-	if !ltype.Impls(ds, rtype) && !rtype.Impls(ds, ltype) {
+	if !ltype.AssignableTo(ds, rtype) && !rtype.AssignableTo(ds, ltype) {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())
 	}
 
-	return TPrimitive{tag: BOOL}, NewBinaryOp(ltree, rtree, c.op)
+	return NewUndefTPrimitive(BOOL), NewBinaryOp(ltree, rtree, c.op) // according to the spec, the result of a comparison is an "untyped" boolean
 }
 
 /* Helpers */
