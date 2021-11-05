@@ -283,7 +283,7 @@ func auxI(ds []Decl, omega Omega) bool {
 			if !isIfaceType(ds, u) || u.Equals(m.u_recv) {
 				continue
 			}
-			if u.Impls(ds, m.u_recv) {
+			if u.AssignableTo(ds, m.u_recv) { // u is an iface type => this only tests for Impls
 				mm := MethInstan{u, m.meth, m.psi}
 				tmp[toKey_Wm(mm)] = mm
 			}
@@ -327,7 +327,7 @@ func auxS(ds []Decl, delta Delta, omega Omega) bool {
 	for _, m := range clone.ms {
 		for _, u := range clone.us {
 			u_N, ok := u.(TNamed)
-			if !ok || isIfaceType(ds, u_N) || !u.ImplsDelta(ds, delta, m.u_recv) {
+			if !ok || isIfaceType(ds, u_N) || !u_N.AssignableToDelta(ds, delta, m.u_recv) {
 				continue
 			}
 			x0, xs, e := body(ds, u_N, m.meth, m.psi)

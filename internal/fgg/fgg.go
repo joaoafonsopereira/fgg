@@ -33,7 +33,11 @@ type Decl = base.Decl
 
 type Type interface {
 	base.Type
+	// Leaving this method for now as it's used in inference, and I haven't thought
+	// about those uses
 	ImplsDelta(ds []Decl, delta Delta, u Type) bool
+
+	AssignableToDelta(ds []Decl, delta Delta, u Type) bool
 	SubsEtaOpen(eta EtaOpen) Type
 	SubsEtaClosed(eta EtaClosed) GroundType
 	Ok(ds []Decl, delta Delta)
@@ -212,7 +216,7 @@ func MakeEtaDelta(ds []Decl, delta Delta, Psi BigPsi, psi SmallPsi) (bool, EtaOp
 	for _, v := range Psi.tFormals {
 		a := v.name.SubsEtaOpen(eta)
 		u_I := v.u_I.SubsEtaOpen(eta)
-		if !a.ImplsDelta(ds, delta, u_I) {
+		if !ImplsDelta(ds, delta, a, getInterface(ds, u_I)) {
 			return false, eta
 		}
 	}
@@ -267,6 +271,10 @@ func isIfaceLikeType(ds []Decl, u Type) bool {
 	isIface := isIfaceType(ds, u)
 	_, isTParam := u.(TParam)
 	return isIface || isTParam
+}
+
+func getInterface(ds []Decl, u Type) ITypeLit {
+	return u.Underlying(ds).(ITypeLit)
 }
 
 func writeTypes(b *strings.Builder, us []Type) {

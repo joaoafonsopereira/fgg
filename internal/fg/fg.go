@@ -59,6 +59,10 @@ func isInterfaceType(ds []Decl, t Type) bool {
 	return ok
 }
 
+func getInterface(ds []Decl, u Type) ITypeLit {
+	return u.Underlying(ds).(ITypeLit)
+}
+
 func isPrimitiveType(t Type) bool {
 	_, ok := t.(TPrimitive)
 	return ok

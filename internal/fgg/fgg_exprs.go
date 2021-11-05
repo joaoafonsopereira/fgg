@@ -141,17 +141,17 @@ func (s StructLit) Typing(ds []Decl, delta Delta, gamma Gamma,
 	elems := make([]FGGExpr, len(s.elems))
 	for i := 0; i < len(s.elems); i++ {
 		u, newSubtree := s.elems[i].Typing(ds, delta, gamma, allowStupid)
-		r := fs[i].u
-		if !u.ImplsDelta(ds, delta, r) {
-			panic("Arg expr must implement field type: arg=" + u.String() +
-				", field=" + r.String() + "\n\t" + s.String())
+		u_f := fs[i].u
+		if !u.AssignableToDelta(ds, delta, u_f) {
+			panic("Arg expr must be assignable to field type: arg=" + u.String() +
+				", field=" + u_f.String() + "\n\t" + s.String())
 		}
 
 		elems[i] = newSubtree
 		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
-		// corresponding to a value of the expected type (r)
+		// corresponding to a value of the expected type (u_f)
 		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
-			elems[i] = ConvertLitNode(lit, r)
+			elems[i] = ConvertLitNode(lit, u_f)
 		}
 	}
 	return s.u_S, StructLit{s.u_S, elems}
@@ -386,7 +386,7 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 	eta := MakeEtaOpen(g.Psi, c.t_args) // CHECKME: applying this subs vs. adding to a new delta?  // Cf. MakeEta TODO CHECK THIS
 	for i := 0; i < len(c.t_args); i++ {
 		u := g.Psi.tFormals[i].u_I.SubsEtaOpen(eta)
-		if !c.t_args[i].ImplsDelta(ds, delta, u) {
+		if !c.t_args[i].AssignableToDelta(ds, delta, u) {
 			panic("Type actual must implement type formal: actual=" +
 				c.t_args[i].String() + ", param=" + u.String() + "\n\t" + c.String())
 		}
@@ -400,8 +400,8 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 		// ..e.g., bad monomorph (Box) example.
 		// The ~beta morally do not occur in ~tau, they only bind ~rho
 		u_p := g.pDecls[i].u.SubsEtaOpen(eta)
-		if !u_a.ImplsDelta(ds, delta, u_p) {
-			panic("Arg expr type must implement param type: arg=" + u_a.String() +
+		if !u_a.AssignableToDelta(ds, delta, u_p) {
+			panic("Arg expr must be assignable to param type: arg=" + u_a.String() +
 				", param=" + u_p.String() + "\n\t" + c.String())
 		}
 		args[i] = newSubtree
@@ -492,7 +492,7 @@ func (a Assert) Eval(ds []Decl) (FGGExpr, string) {
 		return Assert{e, a.u_cast}, rule
 	}
 	u_S := concreteType(a.e_I)
-	if u_S.ImplsDelta(ds, make(Delta), a.u_cast) { // Empty Delta -- not super clear in submission version
+	if u_S.AssignableToDelta(ds, make(Delta), a.u_cast) { // Empty Delta -- not super clear in submission version
 		return a.e_I, "Assert"
 	}
 	panic("Cannot reduce: " + a.String())
@@ -511,15 +511,16 @@ func (a Assert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (T
 		}
 	}
 	// u is a TParam or an interface type TName
-	if IsIfaceLikeType(ds, a.u_cast) {
+	if IsIfaceLikeType(ds, a.u_cast) { // T-ASSERT_I
 		return a.u_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
+	} else { // T-ASSERT_S
+		u_bound := bounds(delta, u)
+		if ImplsDelta(ds, delta, a.u_cast, getInterface(ds, u_bound)) {
+			return a.u_cast, newAst
+		}
+		panic("Struct type assertion must implement expr type: asserted=" +
+			a.u_cast.String() + ", expr=" + u.String())
 	}
-	// a.u_cast might be a named (non-interface) or a primitive type
-	if a.u_cast.ImplsDelta(ds, delta, bounds(delta, u)) {
-		return a.u_cast, newAst
-	}
-	panic("Struct type assertion must implement expr type: asserted=" +
-		a.u_cast.String() + ", expr=" + u.String())
 }
 
 // CHECKME: make isStuck alternative? (i.e., bad cast)

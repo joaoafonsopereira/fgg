@@ -80,7 +80,7 @@ func Eval(intrp Interp, steps int) base.Type {
 		intrp.VPrint("Checking OK:") // TODO: maybe disable by default, enable by flag
 		t, p = p.Ok(allowStupid, base.CHECK)
 		intrp.VPrintln(" " + t.String())
-		if !t.Impls(ds, t_init) { // Check type preservation
+		if !t.AssignableTo(ds, t_init) { // Check type preservation
 			panic("Type not preserved by evaluation.")
 		}
 		if !done && p.GetMain().IsValue() { // N.B. IsValue, not CanEval -- bad asserts panics, like Go (but not actual FGG)

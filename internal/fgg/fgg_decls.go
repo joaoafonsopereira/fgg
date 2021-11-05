@@ -177,8 +177,8 @@ func (md MethDecl) Ok(ds []Decl) {
 	fmt.Println("b:", md.u_ret)
 	fmt.Println("c:", u.ImplsDelta(ds, delta, md.u_ret))*/
 
-	if !u.ImplsDelta(ds, delta, md.u_ret) {
-		panic("Method body type must implement declared return type: found=" +
+	if !u.AssignableToDelta(ds, delta, md.u_ret) {
+		panic("Method body must be assignable to declared return type: found=" +
 			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
 	}
 }
@@ -208,7 +208,9 @@ func (md MethDecl) okBase(ds []Decl) (Delta, Gamma) {
 	subs_md := makeParamIndexSubs(md.Psi_recv)
 	subs_td := makeParamIndexSubs(recv_decl.GetBigPsi())
 	for i := 0; i < len(tfs_td); i++ {
-		if !tfs_md[i].u_I.SubsEtaOpen(subs_md).Impls(ds, tfs_td[i].u_I.SubsEtaOpen(subs_td)) { // Canonicalised
+		md_bound := tfs_md[i].u_I.SubsEtaOpen(subs_md) // Canonicalised
+		td_bound := tfs_td[i].u_I.SubsEtaOpen(subs_td) // ^
+		if !ImplsDelta(ds, make(Delta), md_bound, getInterface(ds, td_bound)) {
 			panic("Receiver parameter upperbound not a subtype of type decl upperbound:" +
 				"\n\tmdecl=" + tfs_md[i].String() +
 				", tdecl=" + tfs_td[i].String())

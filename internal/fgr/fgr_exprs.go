@@ -127,7 +127,7 @@ func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	for i := 0; i < len(s.elems); i++ {
 		t := s.elems[i].Typing(ds, gamma, allowStupid)
 		u := fs[i].t
-		if !t.Impls(ds, u) {
+		if !t.AssignableTo(ds, u) {
 			panic("Arg expr must implement field type: arg=" + t.String() +
 				", field=" + u.String() + "\n\t" + s.String())
 		}
@@ -363,7 +363,7 @@ func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 	}
 	for i := 0; i < len(c.args); i++ {
 		t := c.args[i].Typing(ds, gamma, allowStupid)
-		if !t.Impls(ds, g.pDecls[i].t) {
+		if !t.AssignableTo(ds, g.pDecls[i].t) {
 			panic("Arg expr type must implement param type: arg=" + t + ", param=" +
 				g.pDecls[i].t)
 		}
@@ -455,7 +455,7 @@ func (a Assert) Eval(ds []Decl) (FGRExpr, string) {
 	if !isStructType(ds, t_S) {
 		panic("Non struct type found in struct lit: " + t_S.String())
 	}
-	if t_S.Impls(ds, a.t_cast) {
+	if t_S.AssignableTo(ds, a.t_cast) {
 		return a.e_I, "Assert"
 	}
 	panic("Cannot reduce: " + a.String())
@@ -477,7 +477,7 @@ func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 		return a.t_cast // No further checks -- N.B., Robert said they are looking to refine this
 	}
 	// a.t is a struct type
-	if a.t_cast.Impls(ds, t) {
+	if a.t_cast.AssignableTo(ds, t) {
 		return a.t_cast
 	}
 	panic("Struct type assertion must implement expr type: asserted=" +
@@ -499,7 +499,7 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return a.e_I.(StructLit).t_S.Impls(ds, a.t_cast)
+	return a.e_I.(StructLit).t_S.AssignableTo(ds, a.t_cast)
 }
 
 func (a Assert) String() string {
@@ -547,7 +547,7 @@ func (a SynthAssert) Eval(ds []Decl) (FGRExpr, string) {
 	if !isStructType(ds, t_S) {
 		panic("Non struct type found in struct lit: " + t_S.String())
 	}
-	if t_S.Impls(ds, a.t_cast) {
+	if t_S.AssignableTo(ds, a.t_cast) {
 		return a.e_I, "SynthAssert"
 	}
 	panic("Cannot reduce: " + a.String())
@@ -569,7 +569,7 @@ func (a SynthAssert) Typing(ds []Decl, gamma Gamma, allowStupid bool) Type {
 		return a.t_cast // No further checks -- N.B., Robert said they are looking to refine this
 	}
 	// a.t is a struct type
-	if a.t_cast.Impls(ds, t) {
+	if a.t_cast.AssignableTo(ds, t) {
 		return a.t_cast
 	}
 	panic("Struct type assertion must implement expr type: asserted=" +
@@ -593,7 +593,7 @@ func (a SynthAssert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return a.e_I.(StructLit).t_S.Impls(ds, a.t_cast)
+	return a.e_I.(StructLit).t_S.AssignableTo(ds, a.t_cast)
 }
 
 func (a SynthAssert) String() string {

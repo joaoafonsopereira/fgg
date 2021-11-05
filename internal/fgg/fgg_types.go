@@ -18,6 +18,22 @@ func NewUndefTPrimitive(t Tag) TPrimitive             { return TPrimitive{t, tru
 
 func NewTypeList(tlist []Type) TypeList { return tlist }
 
+
+// Factors t0 <: t_I for every Type u0, since the test is always the same.
+// u_I has type ITypeLit to enforce that the Impls relation is only tested
+// against interface types.
+func ImplsDelta(ds []Decl, delta Delta, u0 Type, u_I ITypeLit) bool {
+	if u_I.HasTList() {
+		tlist := u_I.FlatTList(ds)
+		if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // TODO initial version; not accounting for https://github.com/golang/go/issues/45346
+			return false
+		}
+	}
+	ms0 := methodsDelta(ds, delta, u0)
+	msI := methodsDelta(ds, delta, u_I)
+	return ms0.IsSupersetOf(msI)
+}
+
 /* Type parameters */
 
 type TParam Name
@@ -61,8 +77,28 @@ func (a TParam) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	}
 }
 
+func (a TParam) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+	if a1, ok := u.(TParam); ok {
+		return a == a1
+	} else if isIfaceLikeType(ds, u) { // todo review this -- which types can a TParam implement?
+		//return bounds(delta, a).ImplsDelta(ds, delta, u) // !!! more efficient?
+		gs0 := methodsDelta(ds, delta, a)
+		gs := methodsDelta(ds, delta, u)
+		for k, g := range gs {
+			g0, ok := gs0[k]
+			//if !ok || !sigAlphaEquals(g0, g) { todo should it be sigAlphaEquals?
+			if !ok || g0.String() != g.String() {
+				return false
+			}
+		}
+		return true
+	} else {
+		return false
+	}
+}
+
 // Cf. base.Type
-func (a TParam) Impls(ds []Decl, t base.Type) bool {
+func (a TParam) AssignableTo(ds []Decl, t base.Type) bool {
 	u := asFGGType(t)
 	return a.ImplsDelta(ds, make(Delta), u)
 }
@@ -162,8 +198,27 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	}
 }
 
+func (u0 TNamed) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+	//if _, ok := u.(TParam); ok { // e.g., fgg_test.go, Test014
+	//	panic("Type name does not implement open type param: found=" +
+	//		u0.String() + ", expected=" + u.String())
+	//}
+	if u0.Equals(u) {
+		return true
+	}
+	if isIfaceType(ds, u) {
+		u_I := getInterface(ds, u)
+		return ImplsDelta(ds, delta, u0, u_I)
+	}
+	// if t is not a defined type
+	if _, ok := u.(STypeLit); ok {
+		return u0.Underlying(ds).Equals(u)
+	}
+	return false
+}
+
 // Cf. base.Type
-func (u0 TNamed) Impls(ds []Decl, u base.Type) bool {
+func (u0 TNamed) AssignableTo(ds []Decl, u base.Type) bool {
 	u_fgg := asFGGType(u)
 	return u0.ImplsDelta(ds, make(Delta), u_fgg)
 }
@@ -190,7 +245,8 @@ func (u0 TNamed) Ok(ds []Decl, delta Delta) {
 		actual := tf.name.SubsEtaOpen(eta)
 		// CHECKME: submission T-Named, subs applied to Delta? -- already applied, Delta is coming from the subs context
 		formal := tf.u_I.SubsEtaOpen(eta)
-		if !actual.ImplsDelta(ds, delta, formal) { // formal is a \tau_I, checked by TDecl.Ok
+
+		if !ImplsDelta(ds, delta, actual, getInterface(ds, formal)) { // formal is a \tau_I, checked by TDecl.Ok
 			panic("Type actual must implement type formal: actual=" +
 				actual.String() + " formal=" + formal.String())
 		}
@@ -346,7 +402,23 @@ func (t0 TPrimitive) fitsIn(t TPrimitive) bool {
 	}
 }
 
-func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
+func (t0 TPrimitive) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+	if t0.Equals(u) { // todo !!! this test is not quite correct for undefs
+		return true
+	}
+	if isIfaceType(ds, u) {
+		u_I := getInterface(ds, u)
+		return ImplsDelta(ds, delta, t0, u_I)
+	}
+
+	// todo separate or not??
+	if t0.Undefined() {
+		return t0.canConvertTo(ds, delta, u)
+	}
+	return false
+}
+
+func (t0 TPrimitive) AssignableTo(ds []base.Decl, t base.Type) bool {
 	t_fgg := asFGGType(t)
 	return t0.ImplsDelta(ds, make(Delta), t_fgg)
 }
@@ -418,7 +490,21 @@ func (s STypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	}
 }
 
-func (s STypeLit) Impls(ds []base.Decl, t base.Type) bool {
+func (s STypeLit) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+	if s.Equals(u) {
+		return true
+	}
+	if isIfaceType(ds, u) {
+		u_I := getInterface(ds, u)
+		return ImplsDelta(ds, delta, s, u_I)
+	}
+	if s.Equals(u.Underlying(ds)) { // preparing possible coercion
+		return true
+	}
+	return false
+}
+
+func (s STypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
 	u := asFGGType(t)
 	return s.ImplsDelta(ds, make(Delta), u)
 }
@@ -567,7 +653,15 @@ func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	return gs0.IsSupersetOf(gs)
 }
 
-func (i ITypeLit) Impls(ds []base.Decl, t base.Type) bool {
+func (i ITypeLit) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+	if isIfaceType(ds, u) {
+		u_I := getInterface(ds, u)
+		return ImplsDelta(ds, delta, i, u_I)
+	}
+	return false
+}
+
+func (i ITypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
 	u := asFGGType(t)
 	return i.ImplsDelta(ds, make(Delta), u)
 }

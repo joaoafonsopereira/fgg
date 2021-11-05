@@ -253,7 +253,7 @@ func auxI2(ds []Decl, delta Delta, omega Nomega) bool {
 			if !isIfaceType(ds, u) || u.Equals(m.u_recv) {
 				continue
 			}
-			if u.ImplsDelta(ds, delta, m.u_recv) {
+			if u.AssignableToDelta(ds, delta, m.u_recv) {
 				mm := MethInstanOpen{u, m.meth, m.psi}
 				tmp[tokeyWmOpen(mm)] = mm
 			}
@@ -297,17 +297,18 @@ func auxSOpen(ds []Decl, delta Delta, omega Nomega) bool {
 	for _, m := range clone.ms {
 		for _, u := range clone.us {
 			u_recv := bounds(delta, m.u_recv) // !!! cf. plain type param
-			if !isStructType(ds, u) || !u.ImplsDelta(ds, delta, u_recv) {
+			u_N, ok := u.(TNamed)
+			if !ok || isIfaceType(ds, u_N)  || !u_N.ImplsDelta(ds, delta, u_recv) {
 				continue
 			}
-			u_S := u.(TNamed)
-			x0, xs, e := body(ds, u_S, m.meth, m.psi)
+			//u_S := u.(TNamed) // TODO this cast might fail...     <<<<<<<<-----------------------
+			x0, xs, e := body(ds, u_N, m.meth, m.psi)
 			gamma := make(Gamma)
 			gamma[x0.name] = x0.u
 			for _, pd := range xs {
 				gamma[pd.name] = pd.u
 			}
-			m1 := MethInstanOpen{u_S, m.meth, m.psi}
+			m1 := MethInstanOpen{u_N, m.meth, m.psi}
 			k := tokeyWmOpen(m1)
 			//if _, ok := omega.ms[k]; !ok { // No: initial collectExpr already adds to omega.ms
 			tmp[k] = m1

@@ -119,8 +119,8 @@ func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExp
 	for i, v := range s.elems {
 		t, newSubtree := v.Typing(ds, gamma, allowStupid)
 		u := fs[i].t
-		if !t.Impls(ds, u) {
-			panic("Arg expr must implement field type: arg=" + t.String() +
+		if !t.AssignableTo(ds, u) {
+			panic("Arg expr must be assignable to field type: arg=" + t.String() +
 				", field=" + u.String() + "\n\t" + s.String())
 		}
 
@@ -337,8 +337,8 @@ func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 	for i, a := range c.args {
 		t, newSubtree := a.Typing(ds, gamma, allowStupid)
 		u := g.pDecls[i].t
-		if !t.Impls(ds, u) {
-			panic("Arg expr type must implement param type: arg=" + t.String() +
+		if !t.AssignableTo(ds, u) {
+			panic("Arg expr must be assignable to param type: arg=" + t.String() +
 				", param=" + g.pDecls[i].t.String() + "\n\t" + c.String())
 		}
 
@@ -422,7 +422,7 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 	//if !isStructType(ds, t_S) { todo why this check??
 	//	panic("Non struct type found in struct lit: " + t_S.String())
 	//}
-	if t_S.Impls(ds, a.t_cast) {
+	if t_S.AssignableTo(ds, a.t_cast) {
 		return a.e_I, "Assert"
 	}
 	panic("Cannot reduce: " + a.String())
@@ -430,26 +430,27 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 
 func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 	a.t_cast.Ok(ds)
-	t, e_I := a.e_I.Typing(ds, gamma, allowStupid)
+	u_I, e_I := a.e_I.Typing(ds, gamma, allowStupid)
 	newAst := Assert{e_I, a.t_cast}
-	if !isInterfaceType(ds, t) {
+	if !isInterfaceType(ds, u_I) {
 		if allowStupid {
 			return a.t_cast, newAst
 		} else {
 			panic("Expr must be an interface type (in a non-stupid context): found " +
-				t.String() + " for\n\t" + a.String())
+				u_I.String() + " for\n\t" + a.String())
 		}
 	}
-	// t is an interface type
-	if isInterfaceType(ds, a.t_cast) {
+	// u_I is an interface type
+	if isInterfaceType(ds, a.t_cast) { // T-ASSERT_I
 		return a.t_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
+	} else { // T-ASSERT_S
+		//if a.t_cast.Impls(ds, u_I) {
+		if Impls(ds, a.t_cast, u_I.Underlying(ds).(ITypeLit)) {
+			return a.t_cast, newAst
+		}
+		panic("Struct type assertion must implement expr type: asserted=" +
+			a.t_cast.String() + ", expr=" + u_I.String())
 	}
-	// a.t_cast might be a named (non-interface) or a primitive type
-	if a.t_cast.Impls(ds, t) {
-		return a.t_cast, newAst
-	}
-	panic("Struct type assertion must implement expr type: asserted=" +
-		a.t_cast.String() + ", expr=" + t.String())
 }
 
 // From base.Expr

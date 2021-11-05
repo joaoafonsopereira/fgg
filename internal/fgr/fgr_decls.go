@@ -196,7 +196,7 @@ func (md MDecl) Ok(ds []Decl) {
 	}
 	allowStupid := false
 	t := md.e_body.Typing(ds, env, allowStupid)
-	if !t.Impls(ds, md.t_ret) {
+	if !t.AssignableTo(ds, md.t_ret) {
 		panic("Method body type must implement declared return type: found=" +
 			t.String() + ", expected=" + md.t_ret.String() + "\n\t" + md.String())
 	}

@@ -28,7 +28,7 @@ var _ Spec = Type("")
 
 // Pre: t0, t are known types
 // t0 <: t
-func (t0 Type) Impls(ds []Decl, u base.Type) bool {
+func (t0 Type) AssignableTo(ds []Decl, u base.Type) bool {
 	if _, ok := u.(Type); !ok {
 		panic("Expected FGR type, not " + reflect.TypeOf(u).String() +
 			":\n\t" + u.String())

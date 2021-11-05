@@ -153,8 +153,8 @@ func (md MethDecl) Ok(ds []Decl) {
 	allowStupid := false
 	// don't care about 'ast' returned from typing of method body -- only from method Call
 	t, _ := md.e_body.Typing(ds, env, allowStupid)
-	if !t.Impls(ds, md.t_ret) {
-		panic("Method body type must implement declared return type: found=" +
+	if !t.AssignableTo(ds, md.t_ret) {
+		panic("Method body must be assignable to declared return type: found=" +
 			t.String() + ", expected=" + md.t_ret.String() + "\n\t" + md.String())
 	}
 }

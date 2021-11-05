@@ -162,10 +162,10 @@ func (b BinaryOperation) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type,
 
 	// verify that ltype and rtype are compatible;
 	// if they are, return the most general type
-	if ltype.Impls(ds, rtype) {
+	if ltype.AssignableTo(ds, rtype) {
 		return rtype, newTree
 	}
-	if rtype.Impls(ds, ltype) {
+	if rtype.AssignableTo(ds, ltype) {
 		return ltype, newTree
 	}
 	panic("mismatched types " + ltype.String() + " and " + rtype.String())

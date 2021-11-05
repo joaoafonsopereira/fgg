@@ -35,7 +35,8 @@ type Expr interface {
 /* Types */
 
 type Type interface {
-	Impls(ds []Decl, t Type) bool
+	// Returns a "coerced" AST leaf if tested on a Literal expr
+	AssignableTo(ds []Decl, t Type) bool
 	Equals(t Type) bool
 	String() string
 }

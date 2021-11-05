@@ -15,10 +15,20 @@ func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
 func NewDefTPrimitive(t Tag) TPrimitive          { return TPrimitive{t, false} }
 func NewUndefTPrimitive(t Tag) TPrimitive        { return TPrimitive{t, true} }
 
+
+// Factors t0 <: t_I for every Type t0, since the test is always the same.
+// Pre: isInterfaceType(t_I)
+//func Impls(ds []Decl, t0 Type, t_I Type) bool {
+func Impls(ds []Decl, t0 Type, t_I ITypeLit) bool {
+	ms0 := methods(ds, t0)
+	msI := methods(ds, t_I)
+	return ms0.IsSupersetOf(msI)
+}
+
 /******************************************************************************/
 /* Named (defined) types */
 
-// Represents types declared/defined by the user -- structs, interfaces
+// Represents types declared/defined by the user
 type TNamed Name
 
 var _ Type = TNamed("")
@@ -26,30 +36,20 @@ var _ Spec = TNamed("")
 
 func (t TNamed) GetName() Name { return Name(t) }
 
-// Pre: t0, t are known types
-// t0 <: t
-func (t0 TNamed) Impls(ds []Decl, t base.Type) bool {
+func (t0 TNamed) AssignableTo(ds []base.Decl, t base.Type) bool {
 	t_fg := asFGType(t)
-	switch t_fg.(type) {
-	case TPrimitive:
-		return false
-	case STypeLit:
-		return t0.Underlying(ds).Equals(t_fg)
-	case ITypeLit:
-		gs := methods(ds, t_fg) // t is a t_I
-		gs0 := methods(ds, t0)  // t0 may be any
-		return gs0.IsSupersetOf(gs)
-	case TNamed:
-		if t0.Equals(t_fg) {
-			return true
-		} else if t_I, ok := t_fg.Underlying(ds).(ITypeLit); ok {
-			return t0.Impls(ds, t_I)
-		} else {
-			return false
-		}
-	default:
-		panic("Unknown type: " + t_fg.String())
+	if t0.Equals(t_fg) {
+		return true
 	}
+	if isInterfaceType(ds, t_fg) {
+		t_I := getInterface(ds, t_fg)
+		return Impls(ds, t0, t_I)
+	}
+	// if t is not a defined type
+	if _, ok := t_fg.(STypeLit); ok {
+		return t0.Underlying(ds).Equals(t_fg)
+	}
+	return false
 }
 
 func (t TNamed) Ok(ds []Decl) {
@@ -100,49 +100,43 @@ var _ Type = TPrimitive{}
 func (t0 TPrimitive) Tag() Tag       { return t0.tag }
 func (t TPrimitive) Undefined() bool { return t.undefined }
 
-func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
+func (t0 TPrimitive) AssignableTo(ds []base.Decl, t base.Type) bool {
 	t_fg := asFGType(t)
+	if t0.Equals(t_fg) { // todo !!! this test is not quite correct for undefs
+		return true
+	}
+	if isInterfaceType(ds, t_fg) {
+		t_I := getInterface(ds, t_fg)
+		return Impls(ds, t0, t_I)
+	}
 
+	// todo separate or not??
 	if t0.Undefined() {
 		return t0.canConvertTo(ds, t_fg)
 	}
-
-	switch t_fg := t_fg.(type) {
-	case TPrimitive:
-		return t0.Equals(t_fg)
-	case TNamed:
-		return isInterfaceType(ds, t_fg) && t0.Impls(ds, t_fg.Underlying(ds))
-	case ITypeLit:
-		return len(methods(ds, t_fg)) == 0
-	default:
-		return false
-	}
+	return false
 }
 
 func (t0 TPrimitive) canConvertTo(ds []Decl, t Type) bool {
-	switch under := t.Underlying(ds).(type) {
-	case TPrimitive:
-		return t0.fitsIn(under)
-	case ITypeLit:
-		return len(methods(ds, under)) == 0
-	default:
-		return false
+	if t_P, ok := t.Underlying(ds).(TPrimitive); ok {
+		return t0.fitsIn(t_P)
 	}
+	return false
 }
 
 func (t0 TPrimitive) fitsIn(t TPrimitive) bool {
-	if t0.tag > t.tag {
+	if t0.tag > t.Tag() {
 		return false
 	}
 	switch t0.tag {
 	case BOOL:
-		return t.tag == BOOL
+		return t.Tag() == BOOL
 	case STRING:
-		return t.tag == STRING
+		return t.Tag() == STRING
 	case INT32, INT64:
-		return INT32 <= t.tag && t.tag <= FLOAT64 // kind of ad-hoc
+		return INT32 <= t.Tag() && t.Tag() <= FLOAT64 // kind of ad-hoc
 	case FLOAT32, FLOAT64:
-		return FLOAT32 <= t.tag && t.tag <= FLOAT64
+		return FLOAT32 <= t.Tag() && t.Tag() <= FLOAT64
 	default:
 		panic("FitsIn: t0 has unsupported type: " + t.String())
 	}
@@ -194,16 +188,19 @@ func (s STypeLit) Ok(ds []Decl) {
 	}
 }
 
-func (s STypeLit) Impls(ds []base.Decl, t base.Type) bool {
+func (s STypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
 	t_fg := asFGType(t)
-	switch under := t_fg.Underlying(ds).(type) {
-	case STypeLit:
-		return s.Equals(under)
-	case ITypeLit:
-		return len(methods(ds, under)) == 0
-	default:
-		return false
+	if s.Equals(t_fg) {
+		return true
 	}
+	if isInterfaceType(ds, t_fg) {
+		t_I := getInterface(ds, t_fg)
+		return Impls(ds, s, t_I)
+	}
+	if s.Equals(t_fg.Underlying(ds)) { // preparing possible coercion
+		return true
+	}
+	return false
 }
 
 func (s STypeLit) Equals(t base.Type) bool {
@@ -288,14 +285,13 @@ func (i ITypeLit) Ok(ds []Decl) {
 	}
 }
 
-func (i ITypeLit) Impls(ds []base.Decl, t base.Type) bool {
+func (i ITypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
 	t_fg := asFGType(t)
-	if !isInterfaceType(ds, t_fg) {
-		return false
+	if isInterfaceType(ds, t_fg) {
+		t_I := getInterface(ds, t_fg)
+		return Impls(ds, i, t_I)
 	}
-	gs := methods(ds, t_fg)
-	gs0 := methods(ds, i)
-	return gs0.IsSupersetOf(gs)
+	return false
 }
 
 func (t0 ITypeLit) Equals(t base.Type) bool {

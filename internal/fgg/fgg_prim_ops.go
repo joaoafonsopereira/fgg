@@ -165,10 +165,10 @@ func (b BinaryOperation) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid
 
 	// verify that ltype and rtype are compatible;
 	// if they are, return the most general type
-	if ltype.ImplsDelta(ds, delta, rtype) {
+	if ltype.AssignableToDelta(ds, delta, rtype) {
 		return rtype, newTree
 	}
-	if rtype.ImplsDelta(ds, delta, ltype) {
+	if rtype.AssignableToDelta(ds, delta, ltype) {
 		return ltype, newTree
 	}
 	panic("mismatched types " + ltype.String() + " and " + rtype.String())
@@ -210,7 +210,7 @@ func (c Comparison) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool
 		panic("operator " + string(c.op) + " not defined for type: " + rtype.String())
 	}
 
-	if !ltype.ImplsDelta(ds, delta, rtype) && !rtype.ImplsDelta(ds, delta, ltype) {
+	if !ltype.AssignableToDelta(ds, delta, rtype) && !rtype.AssignableToDelta(ds, delta, ltype) {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())
 	}
 
