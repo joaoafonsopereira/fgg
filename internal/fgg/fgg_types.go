@@ -364,11 +364,11 @@ func (t0 TPrimitive) Equals(t base.Type) bool {
 }
 
 func (t TPrimitive) String() string {
-	undef := ""
+	str := NameFromTag(t.tag)
 	if t.undefined {
-		undef = "(undefined)"
+		str = str + "(undefined)"
 	}
-	return NameFromTag(t.tag) + undef
+	return str
 }
 
 func (t TPrimitive) ToGoString(ds []Decl) string {
@@ -407,7 +407,15 @@ func (s STypeLit) SubsEtaClosed(eta EtaClosed) GroundType {
 }
 
 func (s STypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
-	return s.Equals(u.Underlying(ds))
+	u_fgg := asFGGType(u)
+	switch under := u_fgg.Underlying(ds).(type) {
+	case STypeLit:
+		return s.Equals(under)
+	case ITypeLit:
+		return len(methods(ds, under)) == 0
+	default:
+		return false
+	}
 }
 
 func (s STypeLit) Impls(ds []base.Decl, t base.Type) bool {
@@ -551,7 +559,7 @@ func (i ITypeLit) SubsEtaOpen(eta EtaOpen) Type {
 }
 
 func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
-	if isIfaceType(ds, u) {
+	if !isIfaceType(ds, u) {
 		return false
 	}
 	gs := methodsDelta(ds, delta, u) // u is a t_I

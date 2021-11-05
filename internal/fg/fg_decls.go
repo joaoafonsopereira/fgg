@@ -230,11 +230,11 @@ func (g0 Sig) EqExceptVars(g Sig) bool {
 		return false
 	}
 	for i := 0; i < len(g0.pDecls); i++ {
-		if g0.pDecls[i].t != g.pDecls[i].t {
+		if !g0.pDecls[i].t.Equals(g.pDecls[i].t) {
 			return false
 		}
 	}
-	return g0.meth == g.meth && g0.t_ret == g.t_ret
+	return g0.meth == g.meth && g0.t_ret.Equals(g.t_ret)
 }
 
 // From Spec

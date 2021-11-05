@@ -113,7 +113,7 @@ func (t0 TPrimitive) Impls(ds []base.Decl, t base.Type) bool {
 	case TNamed:
 		return isInterfaceType(ds, t_fg) && t0.Impls(ds, t_fg.Underlying(ds))
 	case ITypeLit:
-		return len(methods(ds, t_fg)) == 0 // or if t0 belongs to type list
+		return len(methods(ds, t_fg)) == 0
 	default:
 		return false
 	}
@@ -125,7 +125,7 @@ func (t0 TPrimitive) canConvertTo(ds []Decl, t Type) bool {
 		return t0.fitsIn(under)
 	case ITypeLit:
 		return len(methods(ds, under)) == 0
-	default: // no type lists in fg interfaces (yet, at least)
+	default:
 		return false
 	}
 }
@@ -196,7 +196,14 @@ func (s STypeLit) Ok(ds []Decl) {
 
 func (s STypeLit) Impls(ds []base.Decl, t base.Type) bool {
 	t_fg := asFGType(t)
-	return s.Equals(t_fg.Underlying(ds))
+	switch under := t_fg.Underlying(ds).(type) {
+	case STypeLit:
+		return s.Equals(under)
+	case ITypeLit:
+		return len(methods(ds, under)) == 0
+	default:
+		return false
+	}
 }
 
 func (s STypeLit) Equals(t base.Type) bool {
@@ -283,7 +290,7 @@ func (i ITypeLit) Ok(ds []Decl) {
 
 func (i ITypeLit) Impls(ds []base.Decl, t base.Type) bool {
 	t_fg := asFGType(t)
-	if isInterfaceType(ds, t_fg) {
+	if !isInterfaceType(ds, t_fg) {
 		return false
 	}
 	gs := methods(ds, t_fg)
