@@ -7,3 +7,4 @@ _scratch.vim
 .vscode
 _sess.code-workspace
 .idea
+tmp/
