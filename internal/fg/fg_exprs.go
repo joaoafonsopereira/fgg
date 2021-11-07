@@ -119,9 +119,13 @@ func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExp
 	for i, v := range s.elems {
 		t, newSubtree := v.Typing(ds, gamma, allowStupid)
 		u := fs[i].t
-		if !t.AssignableTo(ds, u) {
+		ok, coercion := t.AssignableTo(ds, u)
+		if !ok {
 			panic("Arg expr must be assignable to field type: arg=" + t.String() +
 				", field=" + u.String() + "\n\t" + s.String())
+		}
+		if coercion != nil {
+			elems[i] = coercion(newSubtree)
 		}
 
 		elems[i] = newSubtree
@@ -337,9 +341,13 @@ func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 	for i, a := range c.args {
 		t, newSubtree := a.Typing(ds, gamma, allowStupid)
 		u := g.pDecls[i].t
-		if !t.AssignableTo(ds, u) {
+		ok, coercion := t.AssignableTo(ds, u)
+		if !ok {
 			panic("Arg expr must be assignable to param type: arg=" + t.String() +
 				", param=" + g.pDecls[i].t.String() + "\n\t" + c.String())
+		}
+		if coercion != nil { // TODO maybe don't have to test this if I allow "no-op" coercions
+			args[i] = coercion(newSubtree)
 		}
 
 		args[i] = newSubtree
@@ -418,11 +426,11 @@ func (a Assert) Eval(ds []Decl) (FGExpr, string) {
 		e, rule := a.e_I.Eval(ds)
 		return Assert{e.(FGExpr), a.t_cast}, rule
 	}
-	t_S := concreteType(a.e_I)
 	//if !isStructType(ds, t_S) { todo why this check??
 	//	panic("Non struct type found in struct lit: " + t_S.String())
 	//}
-	if t_S.AssignableTo(ds, a.t_cast) {
+	ok, _ := concreteType(a.e_I).AssignableTo(ds, a.t_cast)
+	if ok {
 		return a.e_I, "Assert"
 	}
 	panic("Cannot reduce: " + a.String())
@@ -444,8 +452,7 @@ func (a Assert) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) 
 	if isInterfaceType(ds, a.t_cast) { // T-ASSERT_I
 		return a.t_cast, newAst // No further checks -- N.B., Robert said they are looking to refine this
 	} else { // T-ASSERT_S
-		//if a.t_cast.Impls(ds, u_I) {
-		if Impls(ds, a.t_cast, u_I.Underlying(ds).(ITypeLit)) {
+		if Impls(ds, a.t_cast, getInterface(ds, u_I)) {
 			return a.t_cast, newAst
 		}
 		panic("Struct type assertion must implement expr type: asserted=" +
@@ -464,7 +471,8 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return concreteType(a.e_I).AssignableTo(ds, a.t_cast)
+	ok, _ := concreteType(a.e_I).AssignableTo(ds, a.t_cast)
+	return ok
 }
 
 func (a Assert) String() string {

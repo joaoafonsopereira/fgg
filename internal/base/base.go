@@ -36,7 +36,9 @@ type Expr interface {
 
 type Type interface {
 	// Returns a "coerced" AST leaf if tested on a Literal expr
-	AssignableTo(ds []Decl, t Type) bool
+	//AssignableTo(ds []Decl, t Type) (bool, FGExpr)
+	//AssignableTo(ds []Decl, t Type) (bool, Coercion)
+
 	Equals(t Type) bool
 	String() string
 }

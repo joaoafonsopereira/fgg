@@ -19,7 +19,11 @@ type Type interface {
 	base.Type
 	Ok(ds []Decl)
 	Underlying(ds []Decl) Type
+
+	AssignableTo(ds []Decl, t Type) (bool, Coercion)
 }
+
+type Coercion func(FGExpr) FGExpr
 
 /* AST base interfaces: FGNode, Decl, Spec, Expr */
 

@@ -157,15 +157,21 @@ func (b BinaryOperation) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type,
 		panic("operator " + string(b.op) + " not defined for type: " + rtype.String())
 	}
 
-
 	newTree := NewBinaryOp(ltree, rtree, b.op)
 
 	// verify that ltype and rtype are compatible;
 	// if they are, return the most general type
-	if ltype.AssignableTo(ds, rtype) {
+	if ok, coercion := ltype.AssignableTo(ds, rtype); ok {
+		if coercion != nil {
+			// TODO
+			_ = coercion(ltree)
+		}
 		return rtype, newTree
 	}
-	if rtype.AssignableTo(ds, ltype) {
+	if ok, coercion := rtype.AssignableTo(ds, ltype); ok {
+		if coercion != nil {
+			// TODO newTree = coercion(rtree)
+		}
 		return ltype, newTree
 	}
 	panic("mismatched types " + ltype.String() + " and " + rtype.String())
@@ -207,7 +213,21 @@ func (c Comparison) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGEx
 		panic("operator " + string(c.op) + " not defined for type: " + ltype.String())
 	}
 
-	if !ltype.AssignableTo(ds, rtype) && !rtype.AssignableTo(ds, ltype) {
+	var newTree FGExpr
+
+	if ok, coercion := ltype.AssignableTo(ds, rtype); ok {
+		if coercion != nil {
+			ltree = coercion(ltree)
+		}
+		newTree = NewBinaryOp(ltree, rtree, c.op)
+		//newTree = NewBinaryOp(coercion(ltree), rtree, c.op)
+	} else if ok, coercion := rtype.AssignableTo(ds, ltype); ok {
+		if coercion != nil {
+			rtree = coercion(rtree)
+		}
+		newTree = NewBinaryOp(ltree, rtree, c.op)
+		//newTree = NewBinaryOp(ltree, coercion(rtree), c.op)
+	} else {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())
 	}
 

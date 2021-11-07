@@ -101,3 +101,45 @@ func Test023b(t *testing.T) {
 	//prog := fgParseAndOkGood(t, A, Am, e)
 	//testutils.EvalAndOkGood(t, prog, 4)
 }
+
+/* Tests that show that some form of coercion is necessary */
+
+// Passing a struct literal to a method expecting
+// a TNamed-struct type - which defines methods
+func TestStructLit(t *testing.T) {
+	S := "type S struct {}"
+	Sm := "func (x S) callId(a A) int32 { return a.id(1) }"
+	A := "type A struct { a int32 }"
+	Am := "func (x0 A) id(i int32) int32 { return i }"
+	e := "S{}.callId( struct{a int32}{5} )"
+	prog := fgParseAndOkGood(t, S, Sm, A, Am, e)
+
+	testutils.EvalAndOkGood(t, prog, 3) // Unexpected panic: Method not found: id in  struct { a int32 }
+}
+
+// Returning a struct literal from a method that "promises"
+// a TNamed-struct type - which defines methods
+func TestStructLit2(t *testing.T) {
+	S := "type S struct {}"
+	Sm := "func (x S) retA() A { return struct{a int32}{5} }"
+	A := "type A struct { a int32 }"
+	Am := "func (x0 A) id(i int32) int32 { return i }"
+	e := "S{}.retA().id(1)"
+	prog := fgParseAndOkGood(t, S, Sm, A, Am, e)
+
+	testutils.EvalAndOkGood(t, prog, 3) //Unexpected panic: Method not found: id in  struct { a int32 }
+}
+
+// Returning an integer literal from a method that "promises"
+// a MyInt - which defines methods
+func TestIntLit(t *testing.T) {
+	S := "type S struct {}"
+	Sm := "func (x S) retMyInt() MyInt { return 5 }"
+	A := "type MyInt int32"
+	Am := "func (x0 MyInt) id(i int32) int32 { return i }"
+	//e := "struct{x int32}{5}.x"
+	e := "S{}.retMyInt().id(1)"
+	prog := fgParseAndOkGood(t, S, Sm, A, Am, e)
+
+	testutils.EvalAndOkGood(t, prog, 3) //Unexpected panic: Method not found: id in int32(undefined)
+}

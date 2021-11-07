@@ -25,6 +25,17 @@ func Impls(ds []Decl, t0 Type, t_I ITypeLit) bool {
 	return ms0.IsSupersetOf(msI)
 }
 
+func EqualsOrImpls(ds []Decl, t0 Type, t Type) bool {
+	if t0.Equals(t) {
+		return true
+	}
+	if isInterfaceType(ds, t) {
+		t_I := getInterface(ds, t)
+		return Impls(ds, t0, t_I)
+	}
+	return false
+}
+
 /******************************************************************************/
 /* Named (defined) types */
 
@@ -34,26 +45,24 @@ type TNamed Name
 var _ Type = TNamed("")
 var _ Spec = TNamed("")
 
-func (t TNamed) GetName() Name { return Name(t) }
+func (t0 TNamed) GetName() Name { return Name(t0) }
 
-func (t0 TNamed) AssignableTo(ds []base.Decl, t base.Type) bool {
-	t_fg := asFGType(t)
-	if t0.Equals(t_fg) {
-		return true
-	}
-	if isInterfaceType(ds, t_fg) {
-		t_I := getInterface(ds, t_fg)
-		return Impls(ds, t0, t_I)
+func (t0 TNamed) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
+
+	if EqualsOrImpls(ds, t0, t) {
+		return true, nil
 	}
 	// if t is not a defined type
-	if _, ok := t_fg.(STypeLit); ok {
-		return t0.Underlying(ds).Equals(t_fg)
+	if _, ok := t.(STypeLit); ok {
+		if t0.Underlying(ds).Equals(t) {
+			return true, nil // TODO OOOOOOOOOOOOOOOOOOOOOOOO
+		}
 	}
-	return false
+	return false, nil
 }
 
-func (t TNamed) Ok(ds []Decl) {
-	getTDecl(ds, Name(t)) // panics if decl not found
+func (t0 TNamed) Ok(ds []Decl) {
+	getTDecl(ds, Name(t0)) // panics if decl not found
 }
 
 // t_I is a Spec, but not t_S -- this aspect is currently "dynamically typed"
@@ -82,8 +91,8 @@ func (t0 TNamed) String() string {
 	return string(t0)
 }
 
-func (t TNamed) Underlying(ds []Decl) Type {
-	td := getTDecl(ds, Name(t))
+func (t0 TNamed) Underlying(ds []Decl) Type {
+	td := getTDecl(ds, Name(t0))
 	return td.GetSourceType().Underlying(ds)
 }
 
@@ -188,19 +197,17 @@ func (s STypeLit) Ok(ds []Decl) {
 	}
 }
 
-func (s STypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
-	t_fg := asFGType(t)
-	if s.Equals(t_fg) {
-		return true
+//func (s STypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
+func (s STypeLit) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
+
+	if EqualsOrImpls(ds, s, t) {
+		return true, nil
 	}
-	if isInterfaceType(ds, t_fg) {
-		t_I := getInterface(ds, t_fg)
-		return Impls(ds, s, t_I)
+
+	if s.Equals(t.Underlying(ds)) { // preparing possible coercion
+		return true, nil // TODO OOOOOOOOOOOOOOOOOO
 	}
-	if s.Equals(t_fg.Underlying(ds)) { // preparing possible coercion
-		return true
-	}
-	return false
+	return false, nil
 }
 
 func (s STypeLit) Equals(t base.Type) bool {
@@ -285,13 +292,14 @@ func (i ITypeLit) Ok(ds []Decl) {
 	}
 }
 
-func (i ITypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
+//func (i ITypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
+func (i ITypeLit) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
 	t_fg := asFGType(t)
 	if isInterfaceType(ds, t_fg) {
 		t_I := getInterface(ds, t_fg)
-		return Impls(ds, i, t_I)
+		return Impls(ds, i, t_I), nil
 	}
-	return false
+	return false, nil
 }
 
 func (t0 ITypeLit) Equals(t base.Type) bool {
