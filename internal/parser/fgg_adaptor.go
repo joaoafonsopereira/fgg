@@ -86,7 +86,7 @@ func (a *FGGAdaptor) ExitTypeName(ctx *parser.TypeNameContext) {
 
 func (a *FGGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
 	tag := fgg.TagFromName(ctx.GetName().GetText())
-	a.push(fgg.NewDefTPrimitive(tag))
+	a.push(fgg.NewTPrimitive(tag))
 }
 
 func (a *FGGAdaptor) ExitTypeLit_(ctx *parser.TypeLit_Context) {
@@ -262,14 +262,8 @@ func (a *FGGAdaptor) ExitStructLit(ctx *parser.StructLitContext) {
 			es[i] = a.pop().(fgg.FGGExpr) // Adding backwards
 		}
 	}
-	// If targs omitted, following will fail attempting to cast the non-param name parsed as a TParam
-	tmp := a.pop()
-	cast, ok := tmp.(fgg.TNamed)
-	if !ok { // N.B. \tau_S, means "of the form t_S(~\tau)" (so a TName) -- i.e., not \alpha
-		panic(testutils.PARSER_PANIC_PREFIX + "Expected named type, not: " +
-			reflect.TypeOf(tmp).String() + "\n\t" + tmp.String())
-	}
-	a.push(fgg.NewStructLit(cast, es))
+	t := a.pop().(fgg.Type)
+	a.push(fgg.NewStructLit(t, es))
 }
 
 // Same as Fg
@@ -347,7 +341,7 @@ func (a *FGGAdaptor) ExitBinaryOp(ctx *parser.BinaryOpContext) {
 
 func (a *FGGAdaptor) ExitBoolLit(ctx *parser.BoolLitContext) {
 	lit := ctx.GetLit().GetText()
-	a.push(fgg.NewBool(lit))
+	a.push(fgg.NewBoolLit(lit))
 }
 
 func (a *FGGAdaptor) ExitIntLit(ctx *parser.IntLitContext) {

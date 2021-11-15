@@ -12,11 +12,8 @@ func NewTParam(name Name) TParam                      { return TParam(name) }
 func NewTNamed(t Name, us []Type) TNamed              { return TNamed{t, us} }
 func NewSTypeLit(fds []FieldDecl) STypeLit            { return STypeLit{fds} }
 func NewITypeLit(specs []Spec, tlist []Type) ITypeLit { return ITypeLit{specs, tlist} }
-func NewTPrimitive(t Tag, undef bool) TPrimitive      { return TPrimitive{t, undef} }
-func NewDefTPrimitive(t Tag) TPrimitive               { return TPrimitive{t, false} }
-func NewUndefTPrimitive(t Tag) TPrimitive             { return TPrimitive{t, true} }
-
-func NewTypeList(tlist []Type) TypeList { return tlist }
+func NewTPrimitive(t Tag) TPrimitive                  { return TPrimitive{t} }
+func NewUndefTPrimitive(t Tag) UndefTPrimitive        { return UndefTPrimitive{t} }
 
 
 // Factors t0 <: t_I for every Type u0, since the test is always the same.
@@ -32,6 +29,17 @@ func ImplsDelta(ds []Decl, delta Delta, u0 Type, u_I ITypeLit) bool {
 	ms0 := methodsDelta(ds, delta, u0)
 	msI := methodsDelta(ds, delta, u_I)
 	return ms0.IsSupersetOf(msI)
+}
+
+func EqualsOrImpls(ds []Decl, delta Delta, u0 Type, u Type) bool {
+	if u0.Equals(u) {
+		return true
+	}
+	if isIfaceType(ds, u) {
+		u_I := getInterface(ds, u)
+		return ImplsDelta(ds, delta, u0, u_I)
+	}
+	return false
 }
 
 /* Type parameters */
@@ -77,30 +85,24 @@ func (a TParam) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	}
 }
 
-func (a TParam) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+func (a TParam) AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercion) {
 	if a1, ok := u.(TParam); ok {
-		return a == a1
+		if a.Equals(a1) {
+			return true, noOpCoercion
+		}
 	} else if isIfaceLikeType(ds, u) { // todo review this -- which types can a TParam implement?
-		//return bounds(delta, a).ImplsDelta(ds, delta, u) // !!! more efficient?
 		gs0 := methodsDelta(ds, delta, a)
 		gs := methodsDelta(ds, delta, u)
 		for k, g := range gs {
 			g0, ok := gs0[k]
 			//if !ok || !sigAlphaEquals(g0, g) { todo should it be sigAlphaEquals?
 			if !ok || g0.String() != g.String() {
-				return false
+				return false, nil
 			}
 		}
-		return true
-	} else {
-		return false
+		return true, noOpCoercion
 	}
-}
-
-// Cf. base.Type
-func (a TParam) AssignableTo(ds []Decl, t base.Type) bool {
-	u := asFGGType(t)
-	return a.ImplsDelta(ds, make(Delta), u)
+	return false, nil
 }
 
 func (a TParam) Ok(ds []Decl, delta Delta) {
@@ -198,29 +200,25 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	}
 }
 
-func (u0 TNamed) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+func (u0 TNamed) AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercion) {
 	//if _, ok := u.(TParam); ok { // e.g., fgg_test.go, Test014
 	//	panic("Type name does not implement open type param: found=" +
 	//		u0.String() + ", expected=" + u.String())
 	//}
-	if u0.Equals(u) {
-		return true
-	}
-	if isIfaceType(ds, u) {
-		u_I := getInterface(ds, u)
-		return ImplsDelta(ds, delta, u0, u_I)
+
+	if EqualsOrImpls(ds, delta, u0, u) {
+		return true, noOpCoercion
 	}
 	// if t is not a defined type
 	if _, ok := u.(STypeLit); ok {
-		return u0.Underlying(ds).Equals(u)
+		if u0.Underlying(ds).Equals(u) {
+			coercion := func(expr FGGExpr) FGGExpr {
+				return Convert{u, expr}
+			}
+			return true, coercion
+		}
 	}
-	return false
-}
-
-// Cf. base.Type
-func (u0 TNamed) AssignableTo(ds []Decl, u base.Type) bool {
-	u_fgg := asFGGType(u)
-	return u0.ImplsDelta(ds, make(Delta), u_fgg)
+	return false, nil
 }
 
 func (u0 TNamed) Ok(ds []Decl, delta Delta) {
@@ -317,115 +315,43 @@ func (u TNamed) Underlying(ds []Decl) Type {
 /******************************************************************************/
 /* Primitive types */
 
+// Base interface for primitive (tagged) types,
+// which may be defined or undefined.
+type PrimType interface {
+	Type
+	Tag() Tag
+}
+
+/* Defined primitive types - int32, float32, string, etc. */
+
 type TPrimitive struct {
 	tag       Tag
-	undefined bool
 }
 
 var _ Type = TPrimitive{}
 
-func (t TPrimitive) Tag() Tag        { return t.tag }
-func (t TPrimitive) Undefined() bool { return t.undefined }
+func (t0 TPrimitive) Tag() Tag { return t0.tag }
 
-func (t TPrimitive) SubsEtaOpen(eta EtaOpen) Type {
-	return t
+func (t0 TPrimitive) SubsEtaOpen(eta EtaOpen) Type {
+	return t0
 }
 
-func (t TPrimitive) SubsEtaClosed(eta EtaClosed) GroundType {
-	return t
+func (t0 TPrimitive) SubsEtaClosed(eta EtaClosed) GroundType {
+	return t0
 }
 
 func (t0 TPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
-
-	if t0.Undefined() {
-		return t0.canConvertTo(ds, delta, u)
-	}
-
-	switch u_cast := u.(type) {
-	case TPrimitive:
-		return t0.Equals(u_cast)
-	case TNamed:
-		return isIfaceType(ds, u) && t0.ImplsDelta(ds, delta, u.Underlying(ds))
-	case ITypeLit:
-		if u_cast.HasTList() {
-			if !(u_cast.FlatTList(ds).Contains(t0)) {
-				return false
-			}
-		}
-		return len(methods(ds, u_cast)) == 0
-	default: // TParam, STypeLit, ...
-		return false
-	}
+	panic("Maybe delete this?")
 }
 
-func (t0 TPrimitive) canConvertTo(ds []Decl, delta Delta, u Type) bool {
-	if !t0.Undefined() {
-		panic("shouldn't get here")
+func (t0 TPrimitive) AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercion) {
+	if EqualsOrImpls(ds, delta, t0, u) {
+		return true, noOpCoercion
 	}
-	switch under := u.Underlying(ds).(type) {
-	case TPrimitive:
-		return t0.fitsIn(under)
-	case TParam:
-		constraint := bounds(delta, u)
-		return t0.canConvertTo(ds, delta, constraint) // falls into case below
-	case ITypeLit:
-		if under.HasTList() {
-			for _, u2 := range under.FlatTList(ds) {
-				if !t0.canConvertTo(ds, delta, u2) {
-					return false
-				}
-			}
-		}
-		return len(methods(ds, under)) == 0
-	}
-	return false
+	return false, nil
 }
 
-func (t0 TPrimitive) fitsIn(t TPrimitive) bool {
-	if !t0.Undefined() {
-		panic("shouldn't get here")
-	}
-	if t0.tag > t.tag { // necessary check??
-		return false
-	}
-	switch t0.tag {
-	case BOOL:
-		return t.tag == BOOL
-	case STRING:
-		return t.tag == STRING
-	case INT32, INT64:
-		return INT32 <= t.tag && t.tag <= FLOAT64 // kind of ad-hoc
-	case FLOAT32, FLOAT64:
-		return FLOAT32 <= t.tag && t.tag <= FLOAT64
-	default:
-		panic("FitsIn: t has unsupported type: " + t.String())
-	}
-}
-
-func (t0 TPrimitive) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
-	if t0.Equals(u) { // todo !!! this test is not quite correct for undefs
-		return true
-	}
-	if isIfaceType(ds, u) {
-		u_I := getInterface(ds, u)
-		return ImplsDelta(ds, delta, t0, u_I)
-	}
-
-	// todo separate or not??
-	if t0.Undefined() {
-		return t0.canConvertTo(ds, delta, u)
-	}
-	return false
-}
-
-func (t0 TPrimitive) AssignableTo(ds []base.Decl, t base.Type) bool {
-	t_fgg := asFGGType(t)
-	return t0.ImplsDelta(ds, make(Delta), t_fgg)
-}
-
-func (t TPrimitive) Ok(ds []Decl, delta Delta) {
-	// do nothing -- a primitive type is always Ok
-}
+func (t0 TPrimitive) Ok(ds []Decl, delta Delta) { /* nothing to check */ }
 
 func (t0 TPrimitive) Equals(t base.Type) bool {
 	u := asFGGType(t)
@@ -435,20 +361,106 @@ func (t0 TPrimitive) Equals(t base.Type) bool {
 	return t0 == u.(TPrimitive)
 }
 
-func (t TPrimitive) String() string {
-	str := NameFromTag(t.tag)
-	if t.undefined {
-		str = str + "(undefined)"
+func (t0 TPrimitive) String() string {
+	return NameFromTag(t0.tag)
+}
+
+func (t0 TPrimitive) ToGoString(ds []Decl) string {
+	return t0.String()
+}
+
+func (t0 TPrimitive) Underlying(ds []Decl) Type {
+	return t0
+}
+
+/* Undefined primitive types - a type for Go's untyped constants */
+
+type UndefTPrimitive struct {
+	tag Tag
+}
+
+var _ PrimType = UndefTPrimitive{}
+
+func (u0 UndefTPrimitive) Tag() Tag { return u0.tag }
+
+func (u0 UndefTPrimitive) Ok(ds []Decl, delta Delta) { /* nothing to check */ }
+
+func (u0 UndefTPrimitive) SubsEtaOpen(eta EtaOpen) Type {
+	return u0
+}
+
+func (u0 UndefTPrimitive) SubsEtaClosed(eta EtaClosed) GroundType {
+	return u0
+}
+
+func (u0 UndefTPrimitive) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
+	panic("implement me")
+}
+
+func (u0 UndefTPrimitive) AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercion) {
+	if EqualsOrImpls(ds, delta, u0, u) {
+		return true, noOpCoercion
 	}
-	return str
+	if u0.RepresentableBy(ds, delta, u) {
+		coercion := func(expr FGGExpr) FGGExpr {
+			return Convert{u, expr}
+		}
+		return true, coercion
+	}
+	return false, nil
 }
 
-func (t TPrimitive) ToGoString(ds []Decl) string {
-	return t.String()
+func (u0 UndefTPrimitive) RepresentableBy(ds []Decl, delta Delta, u Type) bool {
+	switch under := u.Underlying(ds).(type) {
+	case PrimType:
+		return u0.fitsIn(under)
+	case TParam:
+		constraint := bounds(delta, u)
+		return u0.RepresentableBy(ds, delta, constraint) // falls into case below
+	case ITypeLit:
+		if under.HasTList() {
+			for _, u2 := range under.FlatTList(ds) {
+				if !u0.RepresentableBy(ds, delta, u2) {
+					return false
+				}
+			}
+		}
+		//return len(methods(ds, under)) == 0  //no: check https://go2goplay.golang.org/p/0gMFbdEUm6j
+	}
+	return false
 }
 
-func (t TPrimitive) Underlying(ds []Decl) Type {
-	return t
+func (u0 UndefTPrimitive) fitsIn(u PrimType) bool {
+	switch {
+	case isBool(u0) && isBool(u):
+		return true
+	case isString(u0) && isString(u):
+		return true
+	case isNumeric(u0) && isNumeric(u):
+		return u0.Tag() <= u.Tag()
+	default:
+		return false
+	}
+}
+
+func (u0 UndefTPrimitive) Equals(t base.Type) bool {
+	u_fgg := asFGGType(t)
+	if _, ok := u_fgg.(UndefTPrimitive); !ok {
+		return false
+	}
+	return u0 == u_fgg.(UndefTPrimitive)
+}
+
+func (u0 UndefTPrimitive) String() string {
+	return NameFromTag(u0.tag) + "(undefined)"
+}
+
+func (u0 UndefTPrimitive) ToGoString(ds []Decl) string {
+	return u0.String()
+}
+
+func (u0 UndefTPrimitive) Underlying(ds []Decl) Type {
+	return u0
 }
 
 /******************************************************************************/
@@ -490,23 +502,22 @@ func (s STypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	}
 }
 
-func (s STypeLit) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
-	if s.Equals(u) {
-		return true
-	}
-	if isIfaceType(ds, u) {
-		u_I := getInterface(ds, u)
-		return ImplsDelta(ds, delta, s, u_I)
-	}
-	if s.Equals(u.Underlying(ds)) { // preparing possible coercion
-		return true
-	}
-	return false
-}
+func (s STypeLit) AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercion) {
 
-func (s STypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
-	u := asFGGType(t)
-	return s.ImplsDelta(ds, make(Delta), u)
+	if EqualsOrImpls(ds, delta, s, u) {
+		return true, noOpCoercion
+	}
+	if s.Equals(u.Underlying(ds)) {
+		coercion := func(expr FGGExpr) FGGExpr {
+			return Convert{u, expr}
+		}
+		return true, coercion
+	}
+	// todo one case missing: a STypeLit might be AssignableTo a TParam, if the
+	//  TParam's constraint has a type list consisting only of that STypeLit
+	//  c.f. https://go2goplay.golang.org/p/8VeqjlKyZeQ
+
+	return false, nil
 }
 
 func (s STypeLit) Ok(ds []Decl, delta Delta) {
@@ -549,7 +560,7 @@ func (s STypeLit) String() string {
 }
 
 func (s STypeLit) ToGoString(ds []Decl) string {
-	panic("implement me")
+	return "main." + s.String()
 }
 
 func (s STypeLit) Underlying(ds []Decl) Type {
@@ -653,17 +664,14 @@ func (i ITypeLit) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	return gs0.IsSupersetOf(gs)
 }
 
-func (i ITypeLit) AssignableToDelta(ds []Decl, delta Delta, u Type) bool {
+func (i ITypeLit) AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercion) {
 	if isIfaceType(ds, u) {
 		u_I := getInterface(ds, u)
-		return ImplsDelta(ds, delta, i, u_I)
+		if ImplsDelta(ds, delta, i, u_I) {
+			return true, noOpCoercion
+		}
 	}
-	return false
-}
-
-func (i ITypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
-	u := asFGGType(t)
-	return i.ImplsDelta(ds, make(Delta), u)
+	return false, nil
 }
 
 // Pre: delta.Ok
@@ -749,7 +757,7 @@ func (i ITypeLit) String() string {
 }
 
 func (i ITypeLit) ToGoString(ds []Decl) string {
-	panic("implement me")
+	return "main." + i.String()
 }
 
 func (i ITypeLit) Underlying(ds []Decl) Type {

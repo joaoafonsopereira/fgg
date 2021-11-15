@@ -8,13 +8,11 @@ import (
 
 /* Export */
 
-func NewTNamed(t Name) TNamed                    { return TNamed(t) }
-func NewITypeLit(ss []Spec) ITypeLit             { return ITypeLit{ss} }
-func NewSTypeLit(fds []FieldDecl) STypeLit       { return STypeLit{fds} }
-func NewTPrimitive(t Tag, undef bool) TPrimitive { return TPrimitive{t, undef} }
-func NewDefTPrimitive(t Tag) TPrimitive          { return TPrimitive{t, false} }
-func NewUndefTPrimitive(t Tag) TPrimitive        { return TPrimitive{t, true} }
-
+func NewTNamed(t Name) TNamed                  { return TNamed(t) }
+func NewITypeLit(ss []Spec) ITypeLit           { return ITypeLit{ss} }
+func NewSTypeLit(fds []FieldDecl) STypeLit     { return STypeLit{fds} }
+func NewTPrimitive(t Tag) TPrimitive           { return TPrimitive{t} }
+func NewUndefTPrimitive(t Tag) UndefTPrimitive { return UndefTPrimitive{t} }
 
 // Factors t0 <: t_I for every Type t0, since the test is always the same.
 // Pre: isInterfaceType(t_I)
@@ -50,12 +48,15 @@ func (t0 TNamed) GetName() Name { return Name(t0) }
 func (t0 TNamed) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
 
 	if EqualsOrImpls(ds, t0, t) {
-		return true, nil
+		return true, noOpCoercion
 	}
 	// if t is not a defined type
 	if _, ok := t.(STypeLit); ok {
 		if t0.Underlying(ds).Equals(t) {
-			return true, nil // TODO OOOOOOOOOOOOOOOOOOOOOOOO
+			coercion := func(expr FGExpr) FGExpr {
+				return Convert{t, expr}
+			}
+			return true, coercion
 		}
 	}
 	return false, nil
@@ -99,60 +100,30 @@ func (t0 TNamed) Underlying(ds []Decl) Type {
 /******************************************************************************/
 /* Primitive types */
 
+// Base interface for primitive (tagged) types,
+// which may be defined or undefined.
+type PrimType interface {
+	Type
+	Tag() Tag
+}
+
+/* Defined primitive types - int32, float32, string, etc. */
+
 type TPrimitive struct {
-	tag       Tag
-	undefined bool
+	tag Tag
 }
 
 var _ Type = TPrimitive{}
 
-func (t0 TPrimitive) Tag() Tag       { return t0.tag }
-func (t TPrimitive) Undefined() bool { return t.undefined }
+func (t0 TPrimitive) Tag() Tag { return t0.tag }
 
-func (t0 TPrimitive) AssignableTo(ds []base.Decl, t base.Type) bool {
-	t_fg := asFGType(t)
-	if t0.Equals(t_fg) { // todo !!! this test is not quite correct for undefs
-		return true
-	}
-	if isInterfaceType(ds, t_fg) {
-		t_I := getInterface(ds, t_fg)
-		return Impls(ds, t0, t_I)
-	}
+func (t0 TPrimitive) Ok(ds []Decl) { /* nothing to check */ }
 
-	// todo separate or not??
-	if t0.Undefined() {
-		return t0.canConvertTo(ds, t_fg)
+func (t0 TPrimitive) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
+	if EqualsOrImpls(ds, t0, t) {
+		return true, noOpCoercion
 	}
-	return false
-}
-
-func (t0 TPrimitive) canConvertTo(ds []Decl, t Type) bool {
-	if t_P, ok := t.Underlying(ds).(TPrimitive); ok {
-		return t0.fitsIn(t_P)
-	}
-	return false
-}
-
-func (t0 TPrimitive) fitsIn(t TPrimitive) bool {
-	if t0.tag > t.Tag() {
-		return false
-	}
-	switch t0.tag {
-	case BOOL:
-		return t.Tag() == BOOL
-	case STRING:
-		return t.Tag() == STRING
-	case INT32, INT64:
-		return INT32 <= t.Tag() && t.Tag() <= FLOAT64 // kind of ad-hoc
-	case FLOAT32, FLOAT64:
-		return FLOAT32 <= t.Tag() && t.Tag() <= FLOAT64
-	default:
-		panic("FitsIn: t0 has unsupported type: " + t.String())
-	}
-}
-
-func (t0 TPrimitive) Ok(ds []Decl) {
-	// do nothing
+	return false, nil
 }
 
 func (t0 TPrimitive) Equals(t base.Type) bool {
@@ -164,14 +135,71 @@ func (t0 TPrimitive) Equals(t base.Type) bool {
 }
 
 func (t0 TPrimitive) String() string {
-	undef := ""
-	if t0.undefined {
-		undef = "(undefined)"
-	}
-	return NameFromTag(t0.tag) + undef
+	return NameFromTag(t0.tag)
 }
 
 func (t0 TPrimitive) Underlying(ds []Decl) Type {
+	return t0
+}
+
+/* Undefined primitive types - a type for Go's untyped constants */
+
+type UndefTPrimitive struct {
+	tag Tag
+}
+
+var _ Type = UndefTPrimitive{}
+
+func (t0 UndefTPrimitive) Tag() Tag { return t0.tag }
+
+func (t0 UndefTPrimitive) Ok(ds []Decl) { /* nothing to check */ }
+
+func (t0 UndefTPrimitive) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
+	if EqualsOrImpls(ds, t0, t) {
+		return true, noOpCoercion
+	}
+	if t0.RepresentableBy(ds, t) {
+		coercion := func(expr FGExpr) FGExpr {
+			return Convert{t, expr}
+		}
+		return true, coercion
+	}
+	return false, nil
+}
+
+func (t0 UndefTPrimitive) RepresentableBy(ds []Decl, t Type) bool {
+	if t_P, ok := t.Underlying(ds).(PrimType); ok {
+		return t0.fitsIn(t_P)
+	}
+	return false
+}
+
+func (t0 UndefTPrimitive) fitsIn(t_P PrimType) bool {
+	switch {
+	case isBool(t0) && isBool(t_P):
+		return true
+	case isString(t0) && isString(t_P):
+		return true
+	case isNumeric(t0) && isNumeric(t_P):
+		return t0.Tag() <= t_P.Tag()
+	default:
+		return false
+	}
+}
+
+func (t0 UndefTPrimitive) Equals(t base.Type) bool {
+	t_fg := asFGType(t)
+	if _, ok := t_fg.(UndefTPrimitive); !ok {
+		return false
+	}
+	return t0 == t_fg.(UndefTPrimitive)
+}
+
+func (t0 UndefTPrimitive) String() string {
+	return NameFromTag(t0.tag) + "(undefined)"
+}
+
+func (t0 UndefTPrimitive) Underlying(ds []Decl) Type {
 	return t0
 }
 
@@ -197,15 +225,15 @@ func (s STypeLit) Ok(ds []Decl) {
 	}
 }
 
-//func (s STypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
 func (s STypeLit) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
-
 	if EqualsOrImpls(ds, s, t) {
-		return true, nil
+		return true, noOpCoercion
 	}
-
-	if s.Equals(t.Underlying(ds)) { // preparing possible coercion
-		return true, nil // TODO OOOOOOOOOOOOOOOOOO
+	if s.Equals(t.Underlying(ds)) {
+		coercion := func(expr FGExpr) FGExpr {
+			return Convert{t, expr}
+		}
+		return true, coercion
 	}
 	return false, nil
 }
@@ -292,12 +320,12 @@ func (i ITypeLit) Ok(ds []Decl) {
 	}
 }
 
-//func (i ITypeLit) AssignableTo(ds []base.Decl, t base.Type) bool {
 func (i ITypeLit) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
-	t_fg := asFGType(t)
-	if isInterfaceType(ds, t_fg) {
-		t_I := getInterface(ds, t_fg)
-		return Impls(ds, i, t_I), nil
+	if isInterfaceType(ds, t) {
+		t_I := getInterface(ds, t)
+		if Impls(ds, i, t_I) {
+			return true, noOpCoercion
+		}
 	}
 	return false, nil
 }

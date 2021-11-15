@@ -73,7 +73,7 @@ func (p FGGProgram) IsPrintf() bool     { return p.printf } // HACK
 func (p FGGProgram) Ok(allowStupid bool, mode base.TypingMode) (base.Type, base.Program) {
 	tds := make(map[string]TypeDecl) // Type name
 	mds := make(map[string]MethDecl) // Hack, string = md.recv.t + "." + md.name
-	for _, v := range p.decls {
+	for i, v := range p.decls {
 		switch d := v.(type) {
 		case TypeDecl:
 			d.Ok(p.decls)
@@ -85,7 +85,8 @@ func (p FGGProgram) Ok(allowStupid bool, mode base.TypingMode) (base.Type, base.
 			tds[t] = d
 		case MethDecl:
 			if mode == base.CHECK {
-				d.Ok(p.decls)
+				//d.Ok(p.decls)
+				d = d.okRet(p.decls)
 			} else if mode == base.INFER {
 				d.OkInfer(p.decls)
 			}
@@ -95,6 +96,7 @@ func (p FGGProgram) Ok(allowStupid bool, mode base.TypingMode) (base.Type, base.
 					" of the method name: " + d.name + "\n\t" + d.String())
 			}
 			mds[hash] = d
+			p.decls[i] = d
 		default:
 			panic("Unknown decl: " + reflect.TypeOf(v).String() + "\n\t" +
 				v.String())
@@ -167,20 +169,24 @@ func (md MethDecl) GetReturn() Type            { return md.u_ret }
 func (md MethDecl) GetBody() FGGExpr           { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
+	_ = md.okRet(ds) // hack to avoid changing base.Decl - todo factor Ok, Ok2 into a single method
+}
 
+// Checks Ok and returns an updated MethDecl,
+// with a possibly updated (coerced) body.
+func (md MethDecl) okRet(ds []Decl) MethDecl {
 	delta, gamma := md.okBase(ds)
 	allowStupid := false
-	// don't care about 'ast' returned from typing of method body -- only from method Call
-	u, _ := md.e_body.Typing(ds, delta, gamma, allowStupid)
+	u, e_body := md.e_body.Typing(ds, delta, gamma, allowStupid)
 
-	/*fmt.Println("a:", u)
-	fmt.Println("b:", md.u_ret)
-	fmt.Println("c:", u.ImplsDelta(ds, delta, md.u_ret))*/
-
-	if !u.AssignableToDelta(ds, delta, md.u_ret) {
+	ok, coercion := u.AssignableToDelta(ds, delta, md.u_ret)
+	if !ok {
 		panic("Method body must be assignable to declared return type: found=" +
 			u.String() + ", expected=" + md.u_ret.String() + "\n\t" + md.String())
 	}
+
+	md.e_body = coercion(e_body)
+	return md
 }
 
 func (md MethDecl) OkInfer(ds []Decl) {

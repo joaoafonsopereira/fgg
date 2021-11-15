@@ -57,7 +57,7 @@ func methods(ds []Decl, t Type) MethodSet {
 			}
 			return res
 		}
-	case TPrimitive, STypeLit:
+	case TPrimitive, UndefTPrimitive, STypeLit:
 		return MethodSet{} // primitives don't implement any methods
 	default:
 		panic("Unknown type: " + t.String()) // Perhaps redundant if all TDecl OK checked first
@@ -80,10 +80,10 @@ func concreteType(e FGExpr) Type {
 	switch e1 := e.(type) {
 	case StructLit:
 		return e1.t_S
-	case NamedPrimitiveLiteral:
+	case TypedPrimitiveValue:
 		return e1.typ
-	case PrimtValue:
-		panic("concreteType(PrimtValue) not defined") // todo <<<<--------------------
+	case PrimitiveLiteral:
+		return UndefTPrimitive{e1.tag}
 	}
 	panic("concreteType: expression is not a value: " + e.String())
 }

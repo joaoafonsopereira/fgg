@@ -54,7 +54,7 @@ func (p FGProgram) IsPrintf() bool     { return p.printf } // HACK
 func (p FGProgram) Ok(allowStupid bool, _mode base.TypingMode) (base.Type, base.Program) {
 	tds := make(map[string]TypeDecl) // Type name
 	mds := make(map[string]MethDecl) // Hack, string = string(md.recv.t) + "." + md.name
-	for _, v := range p.decls {
+	for i, v := range p.decls {
 		switch d := v.(type) {
 		case TypeDecl:
 			d.Ok(p.decls) // Currently empty -- TODO: check, e.g., unique field names -- cf., above [Warning]
@@ -66,13 +66,15 @@ func (p FGProgram) Ok(allowStupid bool, _mode base.TypingMode) (base.Type, base.
 			}
 			tds[t] = d
 		case MethDecl:
-			d.Ok(p.decls)
+			//d.Ok(p.decls)
+			md := d.okRet(p.decls)
 			hash := d.recv.t.String() + "." + d.name
 			if _, ok := mds[hash]; ok {
 				panic("Multiple declarations for receiver " + d.recv.t.String() +
 					" of the method name: " + d.name + "\n\t" + d.String())
 			}
-			mds[hash] = d
+			mds[hash] = md
+			p.decls[i] = md
 		default:
 			panic("Unknown decl: " + reflect.TypeOf(v).String() + "\n\t" +
 				v.String())
@@ -133,6 +135,12 @@ func (md MethDecl) GetReturn() Type            { return md.t_ret }
 func (md MethDecl) GetBody() FGExpr            { return md.e_body }
 
 func (md MethDecl) Ok(ds []Decl) {
+	_ = md.okRet(ds) // hack to avoid changing base.Decl - todo factor Ok, Ok2 into a single method
+}
+
+// Checks Ok and returns an updated MethDecl,
+// with a possibly updated (coerced) body.
+func (md MethDecl) okRet(ds []Decl) MethDecl {
 	md.recv.t.Ok(ds)
 
 	if isInterfaceType(ds, md.recv.t) {
@@ -151,12 +159,15 @@ func (md MethDecl) Ok(ds []Decl) {
 	}
 	md.t_ret.Ok(ds)
 	allowStupid := false
-	// don't care about 'ast' returned from typing of method body -- only from method Call
-	t, _ := md.e_body.Typing(ds, env, allowStupid)
-	if !t.AssignableTo(ds, md.t_ret) {
+	t, e_body := md.e_body.Typing(ds, env, allowStupid)
+	ok, coercion := t.AssignableTo(ds, md.t_ret)
+	if !ok {
 		panic("Method body must be assignable to declared return type: found=" +
 			t.String() + ", expected=" + md.t_ret.String() + "\n\t" + md.String())
 	}
+
+	md.e_body = coercion(e_body)
+	return md
 }
 
 func (md MethDecl) ToSig() Sig {

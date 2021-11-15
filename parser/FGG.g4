@@ -101,7 +101,7 @@ params     : paramDecl (',' paramDecl)*;
 paramDecl  : vari = NAME typ;
 expr       :
 	NAME																# Variable
-	| typ '{' exprs? '}' /* typ is #TypeName, \tau_S */			        # StructLit
+	| typ '{' exprs? '}'                                                # StructLit
 	| expr '.' NAME														# Select
 	| recv = expr '.' NAME '(' targs = typs? ')' '(' args = exprs? ')'	# Call
 	| expr '.' '(' typ ')'												# Assert

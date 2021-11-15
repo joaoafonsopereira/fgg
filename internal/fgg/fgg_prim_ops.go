@@ -106,36 +106,17 @@ func (b BinaryOperation) Eval(ds []Decl) (FGGExpr, string) {
 		return NewBinaryOp(b.left, e, b.op), rule
 	}
 
-	left, right := match(b.left, b.right) // panics if not able to match
-
+	left := b.left.(PrimtValue)
+	right := b.right.(PrimtValue)
 	rawRes := rawBinop(left.Val(), right.Val(), b.op)
 
 	switch left := left.(type) {
 	case PrimitiveLiteral:
 		return PrimitiveLiteral{rawRes, left.tag}, OpToRule[b.op]
 
-	case NamedPrimitiveLiteral:
-		primLit := PrimitiveLiteral{rawRes, left.tag}
-		return NamedPrimitiveLiteral{primLit, left.typ}, OpToRule[b.op]
-
-	case BoolVal:
-		return BoolVal{rawRes.(bool)}, OpToRule[b.op]
-
-	case Int32Val:
-		return Int32Val{rawRes.(int32)}, OpToRule[b.op]
-
-	case Int64Val:
-		return Int64Val{rawRes.(int64)}, OpToRule[b.op]
-
-	case Float32Val:
-		return Float32Val{rawRes.(float32)}, OpToRule[b.op]
-
-	case Float64Val:
-		return Float64Val{rawRes.(float64)}, OpToRule[b.op]
-
-	case StringVal:
-		return StringVal{rawRes.(string)}, OpToRule[b.op]
-
+	case TypedPrimitiveValue:
+		primLit := PrimitiveLiteral{rawRes, left.lit.tag}
+		return TypedPrimitiveValue{primLit, left.typ}, OpToRule[b.op]
 	}
 	panic("Unsupported binary operation: " +
 		b.left.String() + " " + string(b.op) + " " + b.right.String())
@@ -144,7 +125,6 @@ func (b BinaryOperation) Eval(ds []Decl) (FGGExpr, string) {
 func (b BinaryOperation) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
 	ltype, ltree := b.left.Typing(ds, delta, gamma, allowStupid)
 	rtype, rtree := b.right.Typing(ds, delta, gamma, allowStupid)
-	newTree := NewBinaryOp(ltree, rtree, b.op)
 
 	var pred PrimtPredicate
 	switch b.op {
@@ -165,11 +145,11 @@ func (b BinaryOperation) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid
 
 	// verify that ltype and rtype are compatible;
 	// if they are, return the most general type
-	if ltype.AssignableToDelta(ds, delta, rtype) {
-		return rtype, newTree
+	if ok, coercion := ltype.AssignableToDelta(ds, delta, rtype); ok {
+		return rtype, NewBinaryOp(coercion(ltree), rtree, b.op)
 	}
-	if rtype.AssignableToDelta(ds, delta, ltype) {
-		return ltype, newTree
+	if ok, coercion := rtype.AssignableToDelta(ds, delta, ltype); ok {
+		return ltype, NewBinaryOp(ltree, coercion(rtree), b.op)
 	}
 	panic("mismatched types " + ltype.String() + " and " + rtype.String())
 
@@ -194,7 +174,8 @@ func (c Comparison) Eval(ds []Decl) (FGGExpr, string) {
 		return NewBinaryOp(c.left, e, c.op), rule
 	}
 
-	left, right := match(c.left, c.right) // panics if not able to match
+	left := c.left.(PrimtValue)
+	right := c.right.(PrimtValue)
 	res := rawBinop(left.Val(), right.Val(), c.op).(bool)
 	return PrimitiveLiteral{res, BOOL}, OpToRule[c.op] // according to the spec, the result of a comparison is an "untyped" boolean
 }
@@ -210,11 +191,17 @@ func (c Comparison) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool
 		panic("operator " + string(c.op) + " not defined for type: " + rtype.String())
 	}
 
-	if !ltype.AssignableToDelta(ds, delta, rtype) && !rtype.AssignableToDelta(ds, delta, ltype) {
+	var newTree FGGExpr
+
+	if ok, coercion := ltype.AssignableToDelta(ds, delta, rtype); ok {
+		newTree = NewBinaryOp(coercion(ltree), rtree, c.op)
+	} else if ok, coercion := rtype.AssignableToDelta(ds, delta, ltype); ok {
+		newTree = NewBinaryOp(ltree, coercion(rtree), c.op)
+	} else {
 		panic("mismatched types " + ltype.String() + " and " + rtype.String())
 	}
 
-	return NewUndefTPrimitive(BOOL), NewBinaryOp(ltree, rtree, c.op) // according to the spec, the result of a comparison is an "untyped" boolean
+	return NewUndefTPrimitive(BOOL), newTree // according to the spec, the result of a comparison is an "untyped" boolean
 }
 
 /* Helpers */
@@ -292,57 +279,3 @@ func rawBinop(left, right interface{}, op Operator) interface{} {
 		" for type: " + reflect.TypeOf(left).String())
 }
 
-// Returns the matching representation for x and y.
-// If either x or y already has a concrete representation(type), returns both
-// as having that representation -- e.g. match(Int32Val, PrimitiveLiteral) = (Int32Val, Int32Val)
-// If both x and y have undefined representation (both PrimitiveLiteral's),
-// returns the one with the 'highest' tag.
-//
-// Pre: x and y are compatible (match can only be invoked during Eval, i.e. after Typing)
-func match(x, y FGGExpr) (PrimtValue, PrimtValue) {
-	switch xx := x.(type) {
-	case PrimitiveLiteral:
-		if yy, ok := y.(PrimitiveLiteral); ok { // both primitive literals
-			t := maxTag(xx.tag, yy.tag)
-			if t == FLOAT32 || t == FLOAT64 {
-				return PrimitiveLiteral{anyToFloat64(xx.payload), t},
-					PrimitiveLiteral{anyToFloat64(yy.payload), t}
-			} else {
-				return PrimitiveLiteral{xx.payload, t},
-					PrimitiveLiteral{yy.payload, t}
-			}
-		} else {
-			// invert -- will fall into one of the cases below
-			y, x := match(yy, xx)
-			return x, y
-		}
-
-	case BoolVal:
-		return xx, makeBoolVal(y)
-	case Int32Val:
-		return xx, makeInt32Val(y)
-	case Int64Val:
-		return xx, makeInt64Val(y)
-	case Float32Val:
-		return xx, makeFloat32Val(y)
-	case Float64Val:
-		return xx, makeFloat64Val(y)
-	case StringVal:
-		return xx, makeStringVal(y)
-	case NamedPrimitiveLiteral:
-		return xx, makeNamedPrimtLiteral(y, xx.typ)
-	}
-
-	panic("Can't match " + x.String() + " with " + y.String())
-}
-
-func anyToFloat64(x interface{}) float64 {
-	switch xx := x.(type) {
-	case int64:
-		return float64(xx)
-	case float64:
-		return xx
-	default:
-		panic("anyToFloat64: unsupported type " + reflect.TypeOf(x).String())
-	}
-}

@@ -18,7 +18,7 @@ var _ = strings.Compare
 /* Public constructors */
 
 func NewVariable(id Name) Variable                            { return Variable{id} }
-func NewStructLit(u_S TNamed, es []FGGExpr) StructLit         { return StructLit{u_S, es} }
+func NewStructLit(u_S Type, es []FGGExpr) StructLit         { return StructLit{u_S, es} }
 func NewSelect(e FGGExpr, f Name) Select                      { return Select{e, f} }
 func NewCall(e FGGExpr, m Name, us []Type, es []FGGExpr) Call { return Call{e, m, us, es} }
 func NewAssert(e FGGExpr, t Type) Assert                      { return Assert{e, t} }
@@ -80,13 +80,14 @@ func (x Variable) ToGoString(ds []Decl) string {
 /* StructLit */
 
 type StructLit struct {
-	u_S   TNamed // u.t is a t_S
+	u_S   Type
 	elems []FGGExpr
 }
 
 var _ FGGExpr = StructLit{}
 
-func (s StructLit) GetNamedType() TNamed { return s.u_S }
+func (s StructLit) GetNamedType() TNamed { panic("GetNamedType kinda deprecated") }
+func (s StructLit) GetType() Type { return s.u_S }
 func (s StructLit) GetElems() []FGGExpr  { return s.elems }
 
 func (s StructLit) Subs(subs map[Variable]FGGExpr) FGGExpr {
@@ -127,6 +128,9 @@ func (s StructLit) Eval(ds []Decl) (FGGExpr, string) {
 func (s StructLit) Typing(ds []Decl, delta Delta, gamma Gamma,
 	allowStupid bool) (Type, FGGExpr) {
 	s.u_S.Ok(ds, delta)
+	if !isStructType(ds, s.u_S) {
+		panic("Struct literal: " + s.u_S.String() + " is not a struct type")
+	}
 	fs := fields(ds, s.u_S)
 	if len(s.elems) != len(fs) {
 		var b strings.Builder
@@ -142,17 +146,12 @@ func (s StructLit) Typing(ds []Decl, delta Delta, gamma Gamma,
 	for i := 0; i < len(s.elems); i++ {
 		u, newSubtree := s.elems[i].Typing(ds, delta, gamma, allowStupid)
 		u_f := fs[i].u
-		if !u.AssignableToDelta(ds, delta, u_f) {
+		ok, coercion := u.AssignableToDelta(ds, delta, u_f)
+		if !ok {
 			panic("Arg expr must be assignable to field type: arg=" + u.String() +
 				", field=" + u_f.String() + "\n\t" + s.String())
 		}
-
-		elems[i] = newSubtree
-		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
-		// corresponding to a value of the expected type (u_f)
-		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
-			elems[i] = ConvertLitNode(lit, u_f)
-		}
+		elems[i] = coercion(newSubtree)
 	}
 	return s.u_S, StructLit{s.u_S, elems}
 }
@@ -386,7 +385,8 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 	eta := MakeEtaOpen(g.Psi, c.t_args) // CHECKME: applying this subs vs. adding to a new delta?  // Cf. MakeEta TODO CHECK THIS
 	for i := 0; i < len(c.t_args); i++ {
 		u := g.Psi.tFormals[i].u_I.SubsEtaOpen(eta)
-		if !c.t_args[i].AssignableToDelta(ds, delta, u) {
+		u_I := getInterface(ds, u)
+		if !ImplsDelta(ds, delta, c.t_args[i], u_I) {
 			panic("Type actual must implement type formal: actual=" +
 				c.t_args[i].String() + ", param=" + u.String() + "\n\t" + c.String())
 		}
@@ -400,16 +400,12 @@ func (c Call) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Typ
 		// ..e.g., bad monomorph (Box) example.
 		// The ~beta morally do not occur in ~tau, they only bind ~rho
 		u_p := g.pDecls[i].u.SubsEtaOpen(eta)
-		if !u_a.AssignableToDelta(ds, delta, u_p) {
+		ok, coercion := u_a.AssignableToDelta(ds, delta, u_p)
+		if !ok {
 			panic("Arg expr must be assignable to param type: arg=" + u_a.String() +
 				", param=" + u_p.String() + "\n\t" + c.String())
 		}
-		args[i] = newSubtree
-		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
-		// corresponding to a value of the expected type (u_p)
-		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
-			args[i] = ConvertLitNode(lit, u_p)
-		}
+		args[i] = coercion(newSubtree)
 	}
 	return g.u_ret.SubsEtaOpen(eta), // subs necessary, c.psi info (i.e., bounds) will be "lost" after leaving this context
 	Call{e_recv, c.meth, c.t_args, args}
@@ -491,8 +487,8 @@ func (a Assert) Eval(ds []Decl) (FGGExpr, string) {
 		e, rule := a.e_I.Eval(ds)
 		return Assert{e, a.u_cast}, rule
 	}
-	u_S := concreteType(a.e_I)
-	if u_S.AssignableToDelta(ds, make(Delta), a.u_cast) { // Empty Delta -- not super clear in submission version
+	ok, _ := concreteType(a.e_I).AssignableToDelta(ds, Delta{}, a.u_cast) // Empty Delta -- not super clear in submission version
+	if ok {
 		return a.e_I, "Assert"
 	}
 	panic("Cannot reduce: " + a.String())
@@ -535,7 +531,8 @@ func (a Assert) CanEval(ds []Decl) bool {
 	} else if !a.e_I.IsValue() {
 		return false
 	}
-	return concreteType(a.e_I).AssignableTo(ds, a.u_cast)
+	ok, _ := concreteType(a.e_I).AssignableToDelta(ds, Delta{}, a.u_cast)
+	return ok
 }
 
 func (a Assert) String() string {
@@ -552,6 +549,98 @@ func (a Assert) ToGoString(ds []Decl) string {
 	b.WriteString(a.e_I.ToGoString(ds))
 	b.WriteString(".(")
 	b.WriteString(a.u_cast.ToGoString(ds))
+	b.WriteString(")")
+	return b.String()
+}
+
+/* Type conversions */
+
+// Simplified version of Go's type conversions.
+// The main goal is to allow conversions such as:
+//   - int32(1), MyInt(1), MyInt(int32(1))
+//   - struct{} <> S{}
+// Essentially, it only supports conversions between types with similar
+// underlying types (Cf. validConversion).
+// In particular, conversions such as float32(int32(1)) are not supported.
+type Convert struct {
+	typ  Type
+	expr FGGExpr
+}
+
+var _ FGGExpr = Convert{}
+
+func (c Convert) Subs(subs map[Variable]FGGExpr) FGGExpr {
+	return Convert{c.typ, c.expr.Subs(subs)}
+}
+
+func (c Convert) TSubs(eta EtaOpen) FGGExpr {
+	return Convert{c.typ.SubsEtaOpen(eta), c.expr.TSubs(eta)}
+}
+
+func (c Convert) Eval(ds []Decl) (FGGExpr, string) {
+	if !c.expr.IsValue() {
+		e, rule := c.expr.Eval(ds)
+		return Convert{c.typ, e}, rule
+	}
+
+	switch e := c.expr.(type) {
+	case PrimitiveLiteral:
+		if undef, ok := c.typ.(UndefTPrimitive); ok {
+			return PrimitiveLiteral{e, undef.Tag()}, "Convert"
+		} else {
+			return TypedPrimitiveValue{e, c.typ}, "Convert"
+		}
+	case TypedPrimitiveValue:
+		return TypedPrimitiveValue{e.lit, c.typ}, "Convert"
+	case StructLit:
+		return StructLit{c.typ, e.elems}, "Convert"
+	}
+	panic("Unsupported conversion: " + c.String())
+}
+
+func (c Convert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {
+	c.typ.Ok(ds, delta)
+	u_expr, expr := c.expr.Typing(ds, delta, gamma, allowStupid)
+	if validConversion(ds, delta, u_expr, c.typ) {
+		return c.typ, Convert{c.typ, expr}
+	}
+	panic("Invalid type conversion: " + c.String())
+}
+
+func validConversion(ds []Decl, delta Delta, u1, u2 Type) bool {
+	if u1.Underlying(ds).Equals(u2.Underlying(ds)) {
+		return true
+	}
+	if u1, ok := u1.(UndefTPrimitive); ok {
+		return u1.RepresentableBy(ds, delta, u2)
+	}
+	return false
+}
+
+func (c Convert) IsValue() bool {
+	return false
+}
+
+func (c Convert) CanEval(ds []Decl) bool {
+	t_expr := concreteType(c.expr)
+	return validConversion(ds, Delta{}, t_expr, c.typ)
+}
+
+func (c Convert) String() string {
+	var b strings.Builder
+	b.WriteString(c.typ.String())
+	b.WriteString("(")
+	b.WriteString(c.expr.String())
+	b.WriteString(")")
+	return b.String()
+}
+
+func (c Convert) ToGoString(ds []Decl) string {
+	var b strings.Builder
+	b.WriteString("main.")
+	b.WriteString(c.typ.String())
+	b.WriteString("(")
+	b.WriteString(c.expr.String())
 	b.WriteString(")")
 	return b.String()
 }
@@ -613,7 +702,7 @@ func (s Sprintf) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (
 	for i := 0; i < len(s.args); i++ {
 		_, args[i] = s.args[i].Typing(ds, delta, gamma, allowStupid)
 	}
-	return NewDefTPrimitive(STRING), Sprintf{s.format, args}
+	return NewTPrimitive(STRING), Sprintf{s.format, args}
 }
 
 // From base.Expr

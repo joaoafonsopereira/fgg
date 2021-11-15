@@ -97,11 +97,11 @@ func Test023b(t *testing.T) {
 	A := "type A struct {x int32}"
 	Am := "func (x0 A) add1() int32 { return x0.x + 1 }"
 	e := "A{2147483647}.add1()"
-	fgParseAndOkGood(t, A, Am, e)
-	//prog := fgParseAndOkGood(t, A, Am, e)
-	//testutils.EvalAndOkGood(t, prog, 4)
+	prog := fgParseAndOkGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 5)
 }
 
+/******************************************************************************/
 /* Tests that show that some form of coercion is necessary */
 
 // Passing a struct literal to a method expecting

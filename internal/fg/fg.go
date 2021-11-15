@@ -9,7 +9,7 @@ type Name = base.Name
 type FGNode = base.AstNode
 type Decl = base.Decl
 
-/* Name, Context, Type */
+/* Name, Context, Type, Coercion */
 
 // Name: see Aliases (at top)
 
@@ -23,7 +23,16 @@ type Type interface {
 	AssignableTo(ds []Decl, t Type) (bool, Coercion)
 }
 
+// Represents the coercion a compiler would insert
+// after checking assignability. They are needed to ensure
+// type safety holds after every small-step of evaluation.
+// Cf. e.g. TestStructLit at fg_prims_test.go
+// N.B. by making this a function, one can write a closure that captures a type
+// inside an assignability test, which can later (outside AssignableTo)
+// be applied to the desired FGExpr (Cf. e.g. Call.Typing)
 type Coercion func(FGExpr) FGExpr
+
+func noOpCoercion (expr FGExpr) FGExpr { return expr }
 
 /* AST base interfaces: FGNode, Decl, Spec, Expr */
 

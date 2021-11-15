@@ -89,7 +89,7 @@ program    : PACKAGE MAIN ';'
              ('_' '=' expr | FMT '.' PRINTF '(' '"%#v"' ',' expr ')')
              '}' EOF ;
 decls      : ((typeDecl | methDecl) ';')+ ;
-typeDecl   : TYPE id=NAME typeLit ;
+typeDecl   : TYPE id=NAME typ ;
 methDecl   : FUNC '(' paramDecl ')' sig '{' RETURN expr '}' ;
 fieldDecls : fieldDecl (';' fieldDecl)* ;
 fieldDecl  : field=NAME typ ;
@@ -97,10 +97,9 @@ specs      : spec (';' spec)* ;
 spec       : (sig | typ) ;
 sig        : meth=NAME '(' params? ')' typ ;
 params     : paramDecl (',' paramDecl)* ;
-//paramDecl  : vari=NAME typ=NAME ;
 paramDecl  : vari=NAME typ ;
 expr       : NAME                                   # Variable
-           | NAME '{' exprs? '}'                    # StructLit
+           | typ '{' exprs? '}'                     # StructLit
            | expr '.' NAME                          # Select
            | recv=expr '.' NAME '(' args=exprs? ')' # Call
            | expr '.' '(' typ ')'                   # Assert

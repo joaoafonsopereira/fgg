@@ -13,10 +13,11 @@ import (
 /* "Exported" constructors for fgg (monomorph) */
 
 func NewVariable(id Name) Variable                    { return Variable{id} }
-func NewStructLit(t TNamed, es []FGExpr) StructLit    { return StructLit{t, es} }
+func NewStructLit(t Type, es []FGExpr) StructLit    { return StructLit{t, es} }
 func NewSelect(e FGExpr, f Name) Select               { return Select{e, f} }
 func NewCall(e FGExpr, m Name, es []FGExpr) Call      { return Call{e, m, es} }
 func NewAssert(e FGExpr, t Type) Assert               { return Assert{e, t} }
+func NewConvert(t Type, e FGExpr) Convert             { return Convert{t, e} }
 func NewSprintf(format string, args []FGExpr) Sprintf { return Sprintf{format, args} }
 
 /* Variable */
@@ -66,13 +67,13 @@ func (x Variable) ToGoString(ds []Decl) string {
 /* StructLit */
 
 type StructLit struct {
-	t_S   TNamed
+	t_S   Type
 	elems []FGExpr
 }
 
 var _ FGExpr = StructLit{}
 
-func (s StructLit) GetType() TNamed      { return s.t_S }
+func (s StructLit) GetType() Type      { return s.t_S }
 func (s StructLit) GetElems() []FGExpr { return s.elems }
 
 func (s StructLit) Subs(subs map[Variable]FGExpr) FGExpr {
@@ -104,6 +105,9 @@ func (s StructLit) Eval(ds []Decl) (FGExpr, string) {
 
 func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 	s.t_S.Ok(ds)
+	if !isStructType(ds, s.t_S) {
+		panic("Struct literal: " + s.t_S.String() + " is not a struct type")
+	}
 	fs := fields(ds, s.t_S)
 	if len(s.elems) != len(fs) {
 		var b strings.Builder
@@ -124,16 +128,7 @@ func (s StructLit) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExp
 			panic("Arg expr must be assignable to field type: arg=" + t.String() +
 				", field=" + u.String() + "\n\t" + s.String())
 		}
-		if coercion != nil {
-			elems[i] = coercion(newSubtree)
-		}
-
-		elems[i] = newSubtree
-		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
-		// corresponding to a value of the expected type (u)
-		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
-			elems[i] = ConvertLitNode(lit, u)
-		}
+		elems[i] = coercion(newSubtree)
 	}
 	return s.t_S, StructLit{s.t_S, elems}
 }
@@ -346,16 +341,7 @@ func (c Call) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
 			panic("Arg expr must be assignable to param type: arg=" + t.String() +
 				", param=" + g.pDecls[i].t.String() + "\n\t" + c.String())
 		}
-		if coercion != nil { // TODO maybe don't have to test this if I allow "no-op" coercions
-			args[i] = coercion(newSubtree)
-		}
-
-		args[i] = newSubtree
-		// if newSubtree is a PrimitiveLiteral node, convert it to the Ast node
-		// corresponding to a value of the expected type (u)
-		if lit, ok := newSubtree.(PrimitiveLiteral); ok {
-			args[i] = ConvertLitNode(lit, u)
-		}
+		args[i] = coercion(newSubtree)
 	}
 	return g.t_ret, Call{e_recv, c.meth, args}
 }
@@ -493,6 +479,95 @@ func (a Assert) ToGoString(ds []Decl) string {
 	return b.String()
 }
 
+/* Type conversions */
+
+// Simplified version of Go's type conversions.
+// The main goal is to allow conversions such as:
+//   - int32(1), MyInt(1), MyInt(int32(1))
+//   - struct{} <> S{}
+// Essentially, it only supports conversions between types with similar
+// underlying types (Cf. validConversion).
+// In particular, conversions such as float32(int32(1)) are not supported.
+type Convert struct {
+	typ  Type
+	expr FGExpr
+}
+
+var _ FGExpr = Convert{}
+
+func (c Convert) Subs(subs map[Variable]FGExpr) FGExpr {
+	return Convert{c.typ, c.expr.Subs(subs)}
+}
+
+func (c Convert) Eval(ds []Decl) (FGExpr, string) {
+	if !c.expr.IsValue() {
+		e, rule := c.expr.Eval(ds)
+		return Convert{c.typ, e}, rule
+	}
+
+	switch e := c.expr.(type) {
+	case PrimitiveLiteral:
+		if undef, ok := c.typ.(UndefTPrimitive); ok {
+			return PrimitiveLiteral{e, undef.Tag()}, "Convert"
+		} else {
+			return TypedPrimitiveValue{e, c.typ}, "oi"
+		}
+	case TypedPrimitiveValue:
+		return TypedPrimitiveValue{e.lit, c.typ}, "Convert"
+	case StructLit:
+		return StructLit{c.typ, e.elems}, "Convert"
+	}
+	panic("Unsupported conversion: " + c.String())
+}
+
+func (c Convert) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr) {
+	c.typ.Ok(ds)
+	t_expr, expr := c.expr.Typing(ds, gamma, allowStupid)
+
+	if validConversion(ds, t_expr, c.typ) {
+		return c.typ, Convert{c.typ, expr}
+	}
+	panic("Invalid type conversion: " + c.String())
+}
+
+func validConversion(ds []Decl, t1, t2 Type) bool {
+	if t1.Underlying(ds).Equals(t2.Underlying(ds)) {
+		return true
+	}
+	if u1, ok := t1.(UndefTPrimitive); ok {
+		return u1.RepresentableBy(ds, t2)
+	}
+	return false
+}
+
+func (c Convert) IsValue() bool {
+	return false
+}
+
+func (c Convert) CanEval(ds []Decl) bool {
+	t_expr := concreteType(c.expr)
+	return validConversion(ds, t_expr, c.typ)
+}
+
+func (c Convert) String() string {
+	var b strings.Builder
+	b.WriteString(c.typ.String())
+	b.WriteString("(")
+	b.WriteString(c.expr.String())
+	b.WriteString(")")
+	return b.String()
+}
+
+func (c Convert) ToGoString(ds []Decl) string {
+	var b strings.Builder
+	b.WriteString("main.")
+	b.WriteString(c.typ.String())
+	b.WriteString("(")
+	b.WriteString(c.expr.String())
+	b.WriteString(")")
+	return b.String()
+}
+
 /* fmt.Sprintf */
 
 type Sprintf struct {
@@ -546,7 +621,7 @@ func (s Sprintf) Typing(ds []Decl, gamma Gamma, allowStupid bool) (Type, FGExpr)
 	for i := 0; i < len(s.args); i++ {
 		_, args[i] = s.args[i].Typing(ds, gamma, allowStupid)
 	}
-	return NewDefTPrimitive(STRING), Sprintf{s.format, args}
+	return NewTPrimitive(STRING) /* todo def or Undef? */, Sprintf{s.format, args}
 }
 
 // From base.Expr

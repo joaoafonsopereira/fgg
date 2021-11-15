@@ -70,7 +70,7 @@ func (a *FGAdaptor) ExitTNamed(ctx *parser.TNamedContext) {
 
 func (a *FGAdaptor) ExitTPrimitive(ctx *parser.TPrimitiveContext) {
 	tag := fg.TagFromName(ctx.GetName().GetText())
-	a.push(fg.NewDefTPrimitive(tag))
+	a.push(fg.NewTPrimitive(tag))
 }
 
 func (a *FGAdaptor) ExitTypeLit_(ctx *parser.TypeLit_Context) {
@@ -202,7 +202,6 @@ func (a *FGAdaptor) ExitVariable(ctx *parser.VariableContext) {
 // Children: 0=typ (*antlr.TerminalNodeImpl), 1='{', 2=exprs (*parser.ExprsContext), 3='}'
 // N.B. ExprsContext is a "helper" Context, actual exprs are its children
 func (a *FGAdaptor) ExitStructLit(ctx *parser.StructLitContext) {
-	t := fg.NewTNamed(ctx.GetChild(0).(*antlr.TerminalNodeImpl).GetText())
 	es := []fg.FGExpr{}
 	if ctx.GetChildCount() > 3 {
 		nes := (ctx.GetChild(2).GetChildCount() + 1) / 2 // e.g., 'x' ',' 'y' ',' 'z'
@@ -211,6 +210,7 @@ func (a *FGAdaptor) ExitStructLit(ctx *parser.StructLitContext) {
 			es[i] = a.pop().(fg.FGExpr) // Adding backwards
 		}
 	}
+	t := a.pop().(fg.Type)
 	a.push(fg.NewStructLit(t, es))
 }
 
@@ -290,7 +290,7 @@ func (a *FGAdaptor) ExitBinaryOp(ctx *parser.BinaryOpContext) {
 
 func (a *FGAdaptor) ExitBoolLit(ctx *parser.BoolLitContext) {
 	lit := ctx.GetLit().GetText()
-	a.push(fg.NewBool(lit))
+	a.push(fg.NewBoolLit(lit))
 }
 
 func (a *FGAdaptor) ExitIntLit(ctx *parser.IntLitContext) {

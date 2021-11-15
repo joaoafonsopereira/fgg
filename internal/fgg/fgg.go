@@ -27,7 +27,7 @@ type Name = base.Name
 type FGGNode = base.AstNode
 type Decl = base.Decl
 
-/* Name, Type, Type param, Type name -- !!! submission version, "Type name" overloaded */
+/* Name, Type, Coercion */
 
 // Name: see Aliases (at top)
 
@@ -37,13 +37,24 @@ type Type interface {
 	// about those uses
 	ImplsDelta(ds []Decl, delta Delta, u Type) bool
 
-	AssignableToDelta(ds []Decl, delta Delta, u Type) bool
+	AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercion)
 	SubsEtaOpen(eta EtaOpen) Type
 	SubsEtaClosed(eta EtaClosed) GroundType
 	Ok(ds []Decl, delta Delta)
 	ToGoString(ds []Decl) string
 	Underlying(ds []Decl) Type
 }
+
+// Represents the coercion a compiler would insert
+// after checking assignability. They are needed to ensure
+// type safety holds after every small-step of evaluation.
+// Cf. e.g. TestIntLit at fgg_prims_test.go
+// N.B. by making this a function, one can write a closure that captures a type
+// inside an assignability test, which can later (outside AssignableTo)
+// be applied to the desired FGExpr (Cf. e.g. Call.Typing)
+type Coercion func(FGGExpr) FGGExpr
+
+func noOpCoercion (expr FGGExpr) FGGExpr { return expr }
 
 /* Type formals and actuals */
 

@@ -26,7 +26,7 @@ func bounds(delta Delta, u Type) Type {
 	return u // CHECKME: submission version, includes when TParam 'a' not in delta, correct?
 }
 
-func fields(ds []Decl, u_S TNamed) []FieldDecl {
+func fields(ds []Decl, u_S Type) []FieldDecl {
 	s, ok := u_S.Underlying(ds).(STypeLit)
 	if !ok {
 		panic("Not a struct type: " + u_S.String())
@@ -82,7 +82,7 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 		//return methodsDelta(ds, delta, bounds(delta, u_cast)) // !!! delegate to bounds
 		return methodsDelta(ds, delta, upper)
 
-	case TPrimitive, STypeLit:
+	case TPrimitive, UndefTPrimitive, STypeLit:
 		return MethodSet{} // primitives don't implement any methods
 
 	default:
@@ -115,10 +115,10 @@ func concreteType(e FGGExpr) Type {
 	switch e1 := e.(type) {
 	case StructLit:
 		return e1.u_S
-	case NamedPrimitiveLiteral:
+	case TypedPrimitiveValue:
 		return e1.typ
-	case PrimtValue:
-		panic("concreteType(PrimtValue) not defined") // todo <<<<--------------------
+	case PrimitiveLiteral:
+		return UndefTPrimitive{e1.tag}
 	}
 	panic("concreteType: expression is not a value: " + e.String())
 }
