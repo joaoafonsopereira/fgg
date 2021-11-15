@@ -17,8 +17,9 @@ type GroundType interface { // TODO move??
 // kind of a sum type
 func (u TNamed) Ground()     {}
 func (u STypeLit) Ground()   {}
-func (u ITypeLit) Ground()   {}
-func (u TPrimitive) Ground() {}
+func (u ITypeLit) Ground()    {}
+func (t0 TPrimitive) Ground() {}
+func (t0 UndefTPrimitive) Ground() {}
 
 // Basically a Gamma for only ground types
 type GroundGamma map[Name]GroundType
@@ -132,9 +133,10 @@ func collectExpr(ds []Decl, gamma GroundGamma, omega Omega, e FGGExpr) bool {
 		return res
 	case StructLit:
 		res = collectExprs(ds, gamma, omega, e1.elems...)
-		k := toKey_Wt(e1.u_S)
+		u_S := e1.u_S.(GroundType)
+		k := toKey_Wt(u_S)
 		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = e1.u_S
+			omega.us[k] = u_S
 			res = true
 		}
 	case Select:
@@ -146,7 +148,7 @@ func collectExpr(ds []Decl, gamma GroundGamma, omega Omega, e FGGExpr) bool {
 		for k, v := range gamma {
 			gamma1[k] = v
 		}
-		// TODO check _ assign
+		
 		tmp, _ := e1.e_recv.Typing(ds, make(Delta), gamma1, false)
 		ground_recv := tmp.(GroundType)
 		k_t := toKey_Wt(ground_recv)
@@ -168,19 +170,34 @@ func collectExpr(ds []Decl, gamma GroundGamma, omega Omega, e FGGExpr) bool {
 			omega.us[k] = ground
 			res = true
 		}
+	case Convert:
+		res = collectExpr(ds, gamma, omega, e1.expr)
+		ground := e1.typ.(GroundType)
+		k := toKey_Wt(ground)
+		if _, ok := omega.us[k]; !ok {
+			omega.us[k] = ground
+			res = true
+		}
 	case Sprintf:
 		res = collectExprs(ds, gamma, omega, e1.args...)
 
-	case BinaryOperation: // TODO is it possible to factor out the repeated code?? <<<<<<<-----------
+	case BinaryOperation:
 		res = collectExprs(ds, gamma, omega, e1.left, e1.right)
 	case Comparison:
 		res = collectExprs(ds, gamma, omega, e1.left, e1.right)
 
-	case PrimtValue:
-		// Do nothing -- these nodes are leafs of the Ast, hence there is no
-		// new type instantiations to be found underneath them.
-		// Besides, there's no reason to collect primitive type 'instances', as
-		// there is only 1 possible 'instance' and it has no methods.
+	// This may be needed to handle instances of types declared like:
+	// type MyInt[T any] int32
+	case TypedPrimitiveValue:
+		if u_N, ok := e1.typ.(TNamed); ok {
+			k := toKey_Wt(u_N)
+			if _, ok := omega.us[k]; !ok {
+				omega.us[k] = u_N
+				res = true
+			}
+		}
+	case PrimitiveLiteral:
+		return res
 
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e).String() + "\n\t" +
@@ -283,7 +300,7 @@ func auxI(ds []Decl, omega Omega) bool {
 			if !isIfaceType(ds, u) || u.Equals(m.u_recv) {
 				continue
 			}
-			if u.AssignableTo(ds, m.u_recv) { // u is an iface type => this only tests for Impls
+			if ImplsDelta(ds, Delta{}, u, getInterface(ds, m.u_recv)) {
 				mm := MethInstan{u, m.meth, m.psi}
 				tmp[toKey_Wm(mm)] = mm
 			}
@@ -327,9 +344,14 @@ func auxS(ds []Decl, delta Delta, omega Omega) bool {
 	for _, m := range clone.ms {
 		for _, u := range clone.us {
 			u_N, ok := u.(TNamed)
-			if !ok || isIfaceType(ds, u_N) || !u_N.AssignableToDelta(ds, delta, m.u_recv) {
+			if !ok || isIfaceType(ds, u_N) {
 				continue
 			}
+			assignable, _ := u_N.AssignableToDelta(ds, delta, m.u_recv)
+			if !assignable {
+				continue
+			}
+
 			x0, xs, e := body(ds, u_N, m.meth, m.psi)
 			gamma := make(GroundGamma)
 			gamma[x0.name] = x0.u.(GroundType)
@@ -383,11 +405,10 @@ func auxE2(ds []Decl, omega Omega) bool {
 	res := false
 	tmp := make(map[string]MethInstan)
 	for _, m := range omega.ms {
-		// underlying also a ground type
-		u_I, ok := m.u_recv.Underlying(ds).(ITypeLit)
-		if !ok {
+		if !isIfaceType(ds, m.u_recv) {
 			continue
 		}
+		u_I := getInterface(ds, m.u_recv)
 		for _, s := range u_I.GetSpecs() {
 			if u_emb, ok := s.(TNamed); ok {
 				if _, hasMeth := methods(ds, u_emb)[m.meth]; hasMeth {

@@ -80,7 +80,7 @@ func Eval(intrp Interp, steps int) base.Type {
 		intrp.VPrint("Checking OK:") // TODO: maybe disable by default, enable by flag
 		t, p = p.Ok(allowStupid, base.CHECK)
 		intrp.VPrintln(" " + t.String())
-		if !t.AssignableTo(ds, t_init) { // Check type preservation
+		if !assignableTo(ds, t, t_init) { // Check type preservation
 			panic("Type not preserved by evaluation.")
 		}
 		if !done && p.GetMain().IsValue() { // N.B. IsValue, not CanEval -- bad asserts panics, like Go (but not actual FGG)
@@ -90,6 +90,21 @@ func Eval(intrp Interp, steps int) base.Type {
 	intrp.VPrintln(p.GetMain().String()) // Final result  // CHECKME: check prog.printf, for ToGoString?
 	//return p_res
 	return t
+}
+
+// Just a quick fix; avoid having casts all over the place in fg/fgg/fgr-specific code
+func assignableTo(ds []base.Decl, t0, t base.Type ) bool {
+	switch t0 := t0.(type) {
+	case fg.Type:
+		ok, _ := t0.AssignableTo(ds, t.(fg.Type))
+		return ok
+	case fgg.Type:
+		ok, _ := t0.AssignableToDelta(ds, fgg.Delta{}, t.(fgg.Type))
+		return ok
+	case fgr.Type:
+		return t0.AssignableTo(ds, t)
+	}
+	panic("Unknown base.Type")
 }
 
 /* FG */

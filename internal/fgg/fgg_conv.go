@@ -70,7 +70,10 @@ func (c *fg2fgg) convertType(t fg.Type) (Type, error) {
 		return TNamed{t.String(), nil}, nil
 
 	case fg.TPrimitive:
-		return TPrimitive{Tag(t.Tag()), t.Undefined()}, nil
+		return TPrimitive{Tag(t.Tag())}, nil
+
+	case fg.UndefTPrimitive:
+		return UndefTPrimitive{Tag(t.Tag())}, nil
 
 	case fg.STypeLit:
 		return c.convertSTypeLit(t)

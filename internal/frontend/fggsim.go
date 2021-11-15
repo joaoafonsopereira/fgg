@@ -101,7 +101,7 @@ func testMonomStep(verbose bool, omega fgg.Omega, p_fgg fgg.FGGProgram,
 	p1_fgg, _ := p_fgg.Eval()
 	VPrintln(verbose, "\nEval FGG one step: "+p1_fgg.GetMain().String())
 	u1, p1_fgg := castFGG( p1_fgg.Ok(true, base.CHECK) )
-	if !u1.AssignableTo(p_fgg.GetDecls(), u) { // TODO: factor out with Frontend.eval
+	if ok, _ := u1.AssignableToDelta(p_fgg.GetDecls(), fgg.Delta{}, u); !ok { // TODO: factor out with Frontend.eval
 		panic("-test-monom failed: type not preserved\n\tprev=" + u.String() +
 			"\n\tnext=" + u1.String())
 	}
@@ -276,7 +276,7 @@ func testOblitStep(verbose bool, pFgg fgg.FGGProgram,
 	VPrintln(verbose, "\nEval FGG one step: "+
 		pFgg1.GetMain().String())
 	u1, pFgg1 := castFGG( pFgg1.Ok(true, base.CHECK) )
-	if !u1.AssignableTo(pFgg.GetDecls(), u) { // TODO: factor out with eval
+	if ok, _ := u1.AssignableToDelta(pFgg.GetDecls(), fgg.Delta{}, u); !ok { // TODO: factor out with eval
 		panic("-test-monom failed: type not preserved\n\tprev=" + u.String() +
 			"\n\tnext=" + u1.String())
 	}

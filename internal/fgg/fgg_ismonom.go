@@ -17,20 +17,20 @@ func IsMonomOK(p FGGProgram) (bool, string) {
 		if md, ok := v.(MethDecl); ok {
 			omega := Nomega{make(map[string]Type), make(map[string]MethInstanOpen)}
 			delta := md.Psi_recv.ToDelta()
-			for _, v := range md.Psi_meth.tFormals {
-				delta[v.name] = v.u_I
+			for _, tf := range md.Psi_meth.tFormals {
+				delta[tf.name] = tf.u_I
 			}
 			gamma := make(Gamma)
 			psi_recv := make(SmallPsi, len(md.Psi_recv.tFormals))
-			for i, v := range md.Psi_recv.tFormals {
-				psi_recv[i] = v.name
+			for i, tf := range md.Psi_recv.tFormals {
+				psi_recv[i] = tf.name
 			}
 			//psi_recv = md.Psi_recv.Hat()
 			u_recv := TNamed{md.t_recv, psi_recv}
 			gamma[md.x_recv] = u_recv
-			omega.us[toKey_Wt(u_recv)] = u_recv
-			for _, v := range md.pDecls { // TODO: factor out
-				gamma[v.name] = v.u
+			omega.us[tokeyWtOpen(u_recv)] = u_recv
+			for _, pd := range md.pDecls { // TODO: factor out
+				gamma[pd.name] = pd.u
 			}
 			collectExprOpen(ds, delta, gamma, omega, md.e_body)
 			if ok, msg := nomonoOmega(ds, delta, md, omega); ok {
@@ -45,10 +45,10 @@ func IsMonomOK(p FGGProgram) (bool, string) {
 func nomonoOmega(ds []Decl, delta Delta, md MethDecl, omega Nomega) (bool, string) {
 	for auxGOpen(ds, delta, omega) {
 		for _, v := range omega.ms {
-			if !isStructType(ds, v.u_recv) {
+			u_S, ok :=  v.u_recv.(TNamed)
+			if !ok || isIfaceType(ds, u_S) {
 				continue
 			}
-			u_S := v.u_recv.(TNamed)
 			if u_S.t_name == md.t_recv && v.meth == md.name {
 				if occurs(md.Psi_recv, u_S.u_args) {
 					return true, md.t_recv + md.Psi_recv.String() + " ->* " + md.t_recv +
@@ -177,18 +177,35 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, omega Nomega, e FGGExp
 			omega.us[k] = u
 			res = true
 		}
+	case Convert:
+		res = collectExprOpen(ds, delta, gamma, omega, e1.expr)
+		u := e1.typ
+		k := tokeyWtOpen(u)
+		if _, ok := omega.us[k]; !ok {
+			omega.us[k] = u
+			res = true
+		}
 	case Sprintf:
 		res = collectExprsOpen(ds, delta, gamma, omega, e1.args...)
 
-	case BinaryOperation: // TODO is it possible to factor out the repeated code?? <<<<<<<-----------
+	case BinaryOperation:
 		res = collectExprsOpen(ds, delta, gamma, omega, e1.left, e1.right)
 	case Comparison:
 		res = collectExprsOpen(ds, delta, gamma, omega, e1.left, e1.right)
-	case PrimtValue:
-		// Do nothing -- these nodes are leafs of the Ast, hence there is no
-		// new type instantiations to be found underneath them.
-		// Besides, there's no reason to collect primitive type 'instances', as
-		// there is only 1 possible 'instance' and it has no methods.
+
+	// This may be needed to handle instances of types declared like:
+	// type MyInt[T any] int32
+	case TypedPrimitiveValue:
+		if u_N, ok := e1.typ.(TNamed); ok {
+			k := tokeyWtOpen(u_N)
+			if _, ok := omega.us[k]; !ok {
+				omega.us[k] = u_N
+				res = true
+			}
+		}
+	case PrimitiveLiteral:
+		return res
+
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e).String() + "\n\t" +
 			e.String())
@@ -211,12 +228,38 @@ func collectExprsOpen(ds []Decl, delta Delta, gamma Gamma, omega Nomega, es ...F
 func auxGOpen(ds []Decl, delta Delta, omega Nomega) bool {
 	res := false
 	res = auxFOpen(ds, omega) || res
-	res = auxI2(ds, delta, omega) || res
+	res = auxIOpen(ds, delta, omega) || res
 	res = auxMOpen(ds, delta, omega) || res
 	res = auxSOpen(ds, delta, omega) || res
 	// I/face embeddings
 	res = auxE1Open(ds, omega) || res
 	res = auxE2Open(ds, omega) || res
+	// type declarations
+	res = auxTOpen(ds, omega) || res
+	return res
+}
+
+func auxTOpen(ds []Decl, omega Nomega) bool {
+	res := false
+	tmp := make(map[string]Type)
+	for _, u := range omega.us {
+		u_N, isTNamed := u.(TNamed)
+		if !isTNamed {
+			continue
+		}
+		td := getTDecl(ds, u_N.t_name)
+		if src, ok := td.GetSourceType().(TNamed); ok {
+			eta := MakeEtaOpen(td.GetBigPsi(), u_N.GetTArgs())
+			srcInst := src.SubsEtaOpen(eta)
+			tmp[tokeyWtOpen(srcInst)] = srcInst
+		}
+	}
+	for k, v := range tmp {
+		if _, ok := omega.us[k]; !ok {
+			omega.us[k] = v
+			res = true
+		}
+	}
 	return res
 }
 
@@ -239,7 +282,7 @@ func auxFOpen(ds []Decl, omega Nomega) bool {
 	return res
 }
 
-func auxI2(ds []Decl, delta Delta, omega Nomega) bool {
+func auxIOpen(ds []Decl, delta Delta, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]MethInstanOpen)
 	for _, m := range omega.ms {
@@ -253,7 +296,7 @@ func auxI2(ds []Decl, delta Delta, omega Nomega) bool {
 			if !isIfaceType(ds, u) || u.Equals(m.u_recv) {
 				continue
 			}
-			if u.AssignableToDelta(ds, delta, m.u_recv) {
+			if ImplsDelta(ds, delta, u, getInterface(ds, m.u_recv)) {
 				mm := MethInstanOpen{u, m.meth, m.psi}
 				tmp[tokeyWmOpen(mm)] = mm
 			}
@@ -298,10 +341,14 @@ func auxSOpen(ds []Decl, delta Delta, omega Nomega) bool {
 		for _, u := range clone.us {
 			u_recv := bounds(delta, m.u_recv) // !!! cf. plain type param
 			u_N, ok := u.(TNamed)
-			if !ok || isIfaceType(ds, u_N)  || !u_N.ImplsDelta(ds, delta, u_recv) {
+			if !ok || isIfaceType(ds, u_N) {
 				continue
 			}
-			//u_S := u.(TNamed) // TODO this cast might fail...     <<<<<<<<-----------------------
+			assignable, _ := u_N.AssignableToDelta(ds, delta, u_recv)
+			if !assignable {
+				continue
+			}
+
 			x0, xs, e := body(ds, u_N, m.meth, m.psi)
 			gamma := make(Gamma)
 			gamma[x0.name] = x0.u
@@ -330,13 +377,6 @@ func auxE1Open(ds []Decl, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]TNamed)
 	for _, u := range omega.us {
-		// underlying already includes substitution
-		// e.g. for the declaration:
-		// type Pair[X any, Y any] struct { x X; y Y }
-		// we have that
-		// -> (Pair[int, int]).Underlying(ds) == struct { x int, y int }
-		// and
-		// -> (Pair[int, T]).Underlying(ds) == struct { x int, y T } ???????
 		if u_I, ok := u.Underlying(ds).(ITypeLit); ok {
 			for _, s := range u_I.specs {
 				if u_emb, ok := s.(TNamed); ok {
@@ -360,11 +400,10 @@ func auxE2Open(ds []Decl, omega Nomega) bool {
 	res := false
 	tmp := make(map[string]MethInstanOpen)
 	for _, m := range omega.ms {
-		// underlying already applies substitution "implied" by m.u_recv
-		u_I, ok := m.u_recv.Underlying(ds).(ITypeLit)
-		if !ok {
+		if !isIfaceType(ds, m.u_recv) {
 			continue
 		}
+		u_I := getInterface(ds, m.u_recv)
 		for _, s := range u_I.GetSpecs() {
 			if u_emb, ok := s.(TNamed); ok {
 				if _, hasMeth := methods(ds, u_emb)[m.meth]; hasMeth {

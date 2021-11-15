@@ -21,17 +21,30 @@ func ToMonomId(u Type) fg.Type {
 	return monomType(u, nil, nil, Omega{})
 }
 
-//func MonomExpr(e FGGExpr) fg.FGExpr {
-//	return monomExpr1(e, make(Eta))
-//}
-
-/* */
+/* Mu -- method instance sets */
 
 // All m (MethInstan.meth) belong to the same t (MethInstan.u_recv.t_name)
 type Mu map[string]MethInstan // Cf. Omega, toKey_Wm
 
-var empty_I = fg.TNamed("Top") // !!!
-//var empty_S = fg.Type("Empty")
+func makeMu(t Type, omega Omega) Mu {
+	mu := make(Mu)
+	for k, m := range omega.ms {
+		if m.u_recv.Equals(t) {
+			mu[k] = m
+		}
+	}
+	return mu
+}
+
+/* Dummy signatures/methods */
+
+var (
+	Top         = fg.NewTNamed("Top")
+	Top_Lit     = fg.NewStructLit(Top, []fg.FGExpr{})
+	Empty_SType = fg.NewSTypeLit([]fg.FieldDecl{})
+	Empty_Pds   = []fg.ParamDecl{}
+)
+
 
 /* Monomorph: FGGProgram -> FGProgram */
 
@@ -43,8 +56,8 @@ func Monomorph(p FGGProgram) fg.FGProgram {
 
 func ApplyOmega(p FGGProgram, omega Omega) fg.FGProgram {
 	var ds_monom []Decl
-	for _, v := range p.decls {
-		switch d := v.(type) {
+	for _, decl := range p.decls {
+		switch d := decl.(type) {
 		case TypeDecl:
 			tds_monom := monomTDecl1(omega, d)
 			for _, v := range tds_monom {
@@ -60,9 +73,8 @@ func ApplyOmega(p FGGProgram, omega Omega) fg.FGProgram {
 				"\n\t" + d.String())
 		}
 	}
+	ds_monom = append(ds_monom, fg.NewTypeDecl(Top.GetName(), Empty_SType))
 	e_monom := monomExpr1(p.e_main, make(EtaClosed), omega)
-	//ds_monom = append(ds_monom, fg.NewSTypeLit(empty_S, []fg.FieldDecl{}))
-	ds_monom = append(ds_monom, fg.NewTypeDecl(empty_I.GetName(), fg.ITypeLit{})) // TODO THIS IS JUST A QUICK FIX
 	return fg.NewFGProgram(ds_monom, e_monom, p.printf)
 }
 
@@ -90,7 +102,9 @@ func monomType(fgg_type Type, eta EtaClosed, mu Mu, omega Omega) fg.Type {
 		subs := t.SubsEtaClosed(eta)
 		return monomType(subs, eta, nil, omega)
 	case TPrimitive:
-		return fg.NewTPrimitive(fg.Tag(t.tag), t.undefined)
+		return fg.NewTPrimitive(fg.Tag(t.tag))
+	case UndefTPrimitive:
+		return fg.NewUndefTPrimitive(fg.Tag(t.tag))
 	case TNamed:
 		return monomTNamed(t, eta)
 	case STypeLit:
@@ -125,9 +139,8 @@ func monomSTypeLit1(s STypeLit, eta EtaClosed, omega Omega) fg.STypeLit {
 
 func monomITypeLit1(c ITypeLit, eta EtaClosed, mu Mu, omega Omega) fg.ITypeLit {
 	var ss []fg.Spec
-	pds_empty := []fg.ParamDecl{}
-	for _, v := range c.specs {
-		switch s := v.(type) {
+	for _, spec := range c.specs {
+		switch s := spec.(type) {
 		case Sig: // !!! M contains Psi
 			for _, m := range mu {
 				if m.meth != s.meth {
@@ -142,29 +155,29 @@ func monomITypeLit1(c ITypeLit, eta EtaClosed, mu Mu, omega Omega) fg.ITypeLit {
 			}
 			// dummy
 			dummyName := toHashSig(s.SubsEtaOpen(eta.ToEtaOpen())) // eta is open in this context - doesn't include mappings for vars in s.Psi (contrasting with theta above)
-			hash := fg.NewSig(dummyName, pds_empty, empty_I)
+			hash := fg.NewSig(dummyName, Empty_Pds, Top)
 			ss = append(ss, hash)
 		case TNamed: // Embedded
 			ss = append(ss, monomTNamed(s, eta))
 		default:
-			panic("Unknown Spec kind: " + reflect.TypeOf(v).String() +
-				"\n\t" + v.String())
+			panic("Unknown Spec kind: " + reflect.TypeOf(spec).String() +
+				"\n\t" + spec.String())
 		}
 	}
 	return fg.NewITypeLit(ss)
 }
 
-func monomSig1(g Sig, m MethInstan, eta EtaClosed, omega Omega) fg.Sig { // TODO uma Sig devia incluir o nome do método?? paper dá a entender que nao
+// Encapsulates 2 rules:
+//  - M-MFormal (generate "monomorphised" method name)
+//  - M-Sig  (monomorphise pDecls' & return's types)
+func monomSig1(g Sig, m MethInstan, eta EtaClosed, omega Omega) fg.Sig {
 	//getMonomMethName(omega Omega, m Name, targs []Type) Name {
 	m_monom := toMonomMethName1(m.meth, m.psi, eta, omega) // !!! small psi
 	pds_monom := make([]fg.ParamDecl, len(g.pDecls))
-	for i := 0; i < len(pds_monom); i++ {
-		pd := g.pDecls[i]
-		//t_monom := toMonomId(pd.u.SubsEta(eta)) // Cf. M-Type
+	for i, pd := range g.pDecls {
 		t_monom := monomType(pd.u, eta, nil, omega)
 		pds_monom[i] = fg.NewParamDecl(pd.name, t_monom)
 	}
-	//ret_monom := toMonomId(g.u_ret.SubsEta(eta)) // Cf. M-Type
 	ret_monom := monomType(g.u_ret, eta, nil, omega)
 	return fg.NewSig(m_monom, pds_monom, ret_monom)
 }
@@ -184,13 +197,11 @@ func monomMDecl1(omega Omega, md MethDecl) []fg.MethDecl {
 		recv_monom := fg.NewParamDecl(md.x_recv, toMonomId(u_recv))                  // !!! t_S(phi) already ground receiver
 		g_monom := monomSig1(Sig{md.name, md.Psi_meth, md.pDecls, md.u_ret}, m, theta, omega) // !!! small psi
 		e_monom := monomExpr1(md.e_body, theta, omega)
-		md_monom := fg.NewMDecl(recv_monom, g_monom.GetMethod(), g_monom.GetParamDecls(), g_monom.GetReturn(), e_monom)
+		md_monom := fg.NewMDecl(recv_monom,
+			g_monom.GetMethod(), g_monom.GetParamDecls(), g_monom.GetReturn(),
+			e_monom)
 		res = append(res, md_monom)
 	}
-	pds_empty := []fg.ParamDecl{}
-	//e_empty := fg.NewStructLit(empty, []fg.FGExpr{})
-	e_empty := fg.NewVariable(md.x_recv)
-
 	// D'
 	for _, u := range omega.us {
 		u_recv, isTNamed := u.(TNamed)
@@ -199,11 +210,11 @@ func monomMDecl1(omega Omega, md MethDecl) []fg.MethDecl {
 		}
 		recv_monom := fg.NewParamDecl(md.x_recv, toMonomId(u_recv)) // !!! t_S(phi) already ground receiver
 		// has to be open: doesn't include mappings for md.Psi
-		// (contrasting with theta, above)
+		// (contrasting with e.g. theta, above)
 		eta := MakeEtaOpen(md.Psi_recv, u_recv.u_args)
 		g := md.ToSig().SubsEtaOpen(eta)
-		hash := fg.NewMDecl(recv_monom, toHashSig(g), pds_empty, empty_I, e_empty)
-		res = append(res, hash)
+		dummy := fg.NewMDecl(recv_monom, toHashSig(g), Empty_Pds, Top, Top_Lit)
+		res = append(res, dummy)
 	}
 	return res
 }
@@ -217,18 +228,13 @@ func monomExpr1(e1 FGGExpr, eta EtaClosed, omega Omega) fg.FGExpr {
 		for i := 0; i < len(e.elems); i++ {
 			es_monom[i] = monomExpr1(e.elems[i], eta, omega)
 		}
-		t_monom := monomTNamed(e.u_S, eta)
+		t_monom := monomType(e.u_S, eta, nil, omega)
 		return fg.NewStructLit(t_monom, es_monom)
 	case Select:
 		return fg.NewSelect(monomExpr1(e.e_S, eta, omega), e.field)
 	case Call:
 		e_monom := monomExpr1(e.e_recv, eta, omega)
-		var m_monom Name
-		/*if len(e.t_args) == 0 {  // Cf. toMonomMethName1
-			m_monom = e.meth
-		} else {*/
-		m_monom = toMonomMethName1(e.meth, e.t_args, eta, omega) //TODO should this be calling the same function as in monomSig??
-		//}
+		m_monom := toMonomMethName1(e.meth, e.t_args, eta, omega)
 		es_monom := make([]fg.FGExpr, len(e.args))
 		for i := 0; i < len(e.args); i++ {
 			es_monom[i] = monomExpr1(e.args[i], eta, omega)
@@ -238,6 +244,12 @@ func monomExpr1(e1 FGGExpr, eta EtaClosed, omega Omega) fg.FGExpr {
 		e_monom := monomExpr1(e.e_I, eta, omega)
 		t_monom := monomType(e.u_cast, eta, nil, omega)
 		return fg.NewAssert(e_monom, t_monom)
+
+	case Convert:
+		t_monom := monomType(e.typ, eta, nil, omega)
+		e_monom := monomExpr1(e.expr, eta, omega)
+		return fg.NewConvert(t_monom, e_monom)
+
 	case Sprintf:
 		args := make([]fg.FGExpr, len(e.args))
 		for i := 0; i < len(e.args); i++ {
@@ -245,7 +257,7 @@ func monomExpr1(e1 FGGExpr, eta EtaClosed, omega Omega) fg.FGExpr {
 		}
 		return fg.NewSprintf(e.format, args)
 
-	// todo seems to be a lot of code repetition
+	// todo factor this exactly-the-same code
 	case BinaryOperation:
 		left_monom := monomExpr1(e.left, eta, omega)
 		right_monom := monomExpr1(e.right, eta, omega)
@@ -257,22 +269,11 @@ func monomExpr1(e1 FGGExpr, eta EtaClosed, omega Omega) fg.FGExpr {
 
 	case PrimitiveLiteral:
 		return fg.NewPrimitiveLiteral(e.payload, fg.Tag(e.tag))
-	case NamedPrimitiveLiteral:
-		monom_lit := fg.NewPrimitiveLiteral(e.payload, fg.Tag(e.tag))
-		monom_typ := monomTNamed(e.typ, eta)
-		return fg.NewNamedPrimitiveLiteral(monom_lit, monom_typ)
-	case BoolVal:
-		return fg.NewBoolVal(e.val)
-	case Int32Val:
-		return fg.NewInt32Val(e.val)
-	case Int64Val:
-		return fg.NewInt64Val(e.val)
-	case Float32Val:
-		return fg.NewFloat32Val(e.val)
-	case Float64Val:
-		return fg.NewFloat64Val(e.val)
-	case StringVal:
-		return fg.NewStringVal(e.val)
+
+	case TypedPrimitiveValue:
+		lit_monom := fg.NewPrimitiveLiteral(e.lit.payload, fg.Tag(e.lit.tag))
+		t_monom := monomType(e.typ, eta, nil, omega)
+		return fg.NewTypedPrimitiveValue(lit_monom, t_monom)
 
 	default:
 		panic("Unknown Expr kind: " + reflect.TypeOf(e1).String() + "\n\t" +
@@ -295,15 +296,6 @@ func getMonomMethName(omega Omega, m Name, targs []Type) Name {
 	return Name(res)
 }*/
 
-func makeMu(t Type, omega Omega) Mu {
-	mu := make(Mu)
-	for k, m := range omega.ms {
-		if m.u_recv.Equals(t) {
-			mu[k] = m
-		}
-	}
-	return mu
-}
 
 func toMonomId(u TNamed) fg.TNamed {
 	res := u.String()
@@ -315,7 +307,8 @@ func toMonomId(u TNamed) fg.TNamed {
 }
 
 // !!! CHECKME: psi should already be grounded, eta unnecessary?
-// TODO: this method is kind of overloaded, as it represents both M-METHOD & M-MFORMAL (fig. 21)
+// N.B. this method is kind of overloaded,
+// as it represents both M-METHOD & M-MFORMAL (fig. 21 of paper)
 func toMonomMethName1(m Name, psi SmallPsi, eta EtaClosed, omega Omega) Name {
 	if len(psi) == 0 {
 		return m + "<>"
@@ -370,7 +363,6 @@ func toHashSig(g Sig) string {
 	return res
 }
 
-/*
 
 
 
@@ -410,7 +402,6 @@ func toHashSig(g Sig) string {
 
 
 
- */
 
 /* Deprecated -- Simplistic isMonom check:
    no typeparam nested in a named type in typeargs of StructLit/Call exprs */
