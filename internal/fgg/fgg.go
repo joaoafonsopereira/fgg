@@ -54,7 +54,7 @@ type Type interface {
 // be applied to the desired FGExpr (Cf. e.g. Call.Typing)
 type Coercion func(FGGExpr) FGGExpr
 
-func noOpCoercion (expr FGGExpr) FGGExpr { return expr }
+func noOpCoercion(expr FGGExpr) FGGExpr { return expr }
 
 /* Type formals and actuals */
 

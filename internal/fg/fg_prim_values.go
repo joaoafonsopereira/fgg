@@ -104,7 +104,7 @@ type PrimtValue interface {
 	Val() interface{}
 }
 
-func (x PrimitiveLiteral) Val() interface{}      { return x.payload }
+func (x PrimitiveLiteral) Val() interface{}    { return x.payload }
 func (x TypedPrimitiveValue) Val() interface{} { return x.lit.payload }
 
 /******************************************************************************/
@@ -248,7 +248,6 @@ func truncateFractionalPart(x string) string {
 	return leadingInt.FindString(x)
 }
 
-
 /* Predicates */
 
 type PrimtPredicate func(PrimType) bool
@@ -273,4 +272,3 @@ func evalPrimtPredicate(ds []Decl, predicate PrimtPredicate, t Type) bool {
 	}
 	return false
 }
-

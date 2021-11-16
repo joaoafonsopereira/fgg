@@ -278,4 +278,3 @@ func rawBinop(left, right interface{}, op Operator) interface{} {
 	panic("Unsupported raw binOp: " + string(op) +
 		" for type: " + reflect.TypeOf(left).String())
 }
-

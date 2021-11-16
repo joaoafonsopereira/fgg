@@ -248,7 +248,6 @@ func truncateFractionalPart(x string) string {
 	return leadingInt.FindString(x)
 }
 
-
 /* Predicates */
 
 type PrimtPredicate func(PrimType) bool
@@ -287,4 +286,3 @@ func evalPrimtPredicate(ds []Decl, delta Delta, pred PrimtPredicate, u Type) boo
 	}
 	return false
 }
-

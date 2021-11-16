@@ -15,7 +15,6 @@ func NewITypeLit(specs []Spec, tlist []Type) ITypeLit { return ITypeLit{specs, t
 func NewTPrimitive(t Tag) TPrimitive                  { return TPrimitive{t} }
 func NewUndefTPrimitive(t Tag) UndefTPrimitive        { return UndefTPrimitive{t} }
 
-
 // Factors t0 <: t_I for every Type u0, since the test is always the same.
 // u_I has type ITypeLit to enforce that the Impls relation is only tested
 // against interface types.
@@ -325,7 +324,7 @@ type PrimType interface {
 /* Defined primitive types - int32, float32, string, etc. */
 
 type TPrimitive struct {
-	tag       Tag
+	tag Tag
 }
 
 var _ Type = TPrimitive{}
@@ -425,6 +424,7 @@ func (u0 UndefTPrimitive) RepresentableBy(ds []Decl, delta Delta, u Type) bool {
 				}
 			}
 		}
+		return true
 		//return len(methods(ds, under)) == 0  //no: check https://go2goplay.golang.org/p/0gMFbdEUm6j
 	}
 	return false

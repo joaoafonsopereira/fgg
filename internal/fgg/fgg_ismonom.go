@@ -45,7 +45,7 @@ func IsMonomOK(p FGGProgram) (bool, string) {
 func nomonoOmega(ds []Decl, delta Delta, md MethDecl, omega Nomega) (bool, string) {
 	for auxGOpen(ds, delta, omega) {
 		for _, v := range omega.ms {
-			u_S, ok :=  v.u_recv.(TNamed)
+			u_S, ok := v.u_recv.(TNamed)
 			if !ok || isIfaceType(ds, u_S) {
 				continue
 			}
@@ -97,6 +97,46 @@ type Nomega struct {
 	ms map[string]MethInstanOpen
 }
 
+func (w Nomega) addTInst(u Type) bool {
+	key := tokeyWtOpen(u)
+	if _, ok := w.us[key]; !ok {
+		w.us[key] = u
+		return true
+	}
+	return false
+}
+
+func (w Nomega) addTInsts(insts map[string]Type) bool {
+	res := false
+	for k, u := range insts {
+		if _, ok := w.us[k]; !ok {
+			w.us[k] = u
+			res = true
+		}
+	}
+	return res
+}
+
+func (w Nomega) addMInst(m MethInstanOpen) bool {
+	key := tokeyWmOpen(m)
+	if _, ok := w.ms[key]; !ok {
+		w.ms[key] = m
+		return true
+	}
+	return false
+}
+
+func (w Nomega) addMInsts(ms map[string]MethInstanOpen) bool {
+	res := false
+	for k, m := range ms {
+		if _, ok := w.ms[k]; !ok {
+			w.ms[k] = m
+			res = true
+		}
+	}
+	return res
+}
+
 func (w Nomega) clone() Nomega {
 	us := make(map[string]Type)
 	ms := make(map[string]MethInstanOpen)
@@ -143,11 +183,7 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, omega Nomega, e FGGExp
 		return res
 	case StructLit:
 		res = collectExprsOpen(ds, delta, gamma, omega, e1.elems...)
-		k := tokeyWtOpen(e1.u_S)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = e1.u_S
-			res = true
-		}
+		res = omega.addTInst(e1.u_S) || res
 	case Select:
 		return collectExprOpen(ds, delta, gamma, omega, e1.e_S)
 	case Call:
@@ -158,33 +194,15 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, omega Nomega, e FGGExp
 			gamma1[k] = v
 		}
 		u_recv, _ := e1.e_recv.Typing(ds, delta, gamma1, false)
-		k_t := tokeyWtOpen(u_recv)
-		if _, ok := omega.us[k_t]; !ok {
-			omega.us[k_t] = u_recv
-			res = true
-		}
+		res = omega.addTInst(u_recv) || res
 		m := MethInstanOpen{u_recv, e1.meth, e1.GetTArgs()} // CHECKME: why add u_recv separately?
-		k_m := tokeyWmOpen(m)
-		if _, ok := omega.ms[k_m]; !ok {
-			omega.ms[k_m] = m
-			res = true
-		}
+		res = omega.addMInst(m) || res
 	case Assert:
 		res = collectExprOpen(ds, delta, gamma, omega, e1.e_I)
-		u := e1.u_cast
-		k := tokeyWtOpen(u)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = u
-			res = true
-		}
+		res = omega.addTInst(e1.u_cast) || res
 	case Convert:
 		res = collectExprOpen(ds, delta, gamma, omega, e1.expr)
-		u := e1.typ
-		k := tokeyWtOpen(u)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = u
-			res = true
-		}
+		res = omega.addTInst(e1.typ) || res
 	case Sprintf:
 		res = collectExprsOpen(ds, delta, gamma, omega, e1.args...)
 
@@ -197,11 +215,7 @@ func collectExprOpen(ds []Decl, delta Delta, gamma Gamma, omega Nomega, e FGGExp
 	// type MyInt[T any] int32
 	case TypedPrimitiveValue:
 		if u_N, ok := e1.typ.(TNamed); ok {
-			k := tokeyWtOpen(u_N)
-			if _, ok := omega.us[k]; !ok {
-				omega.us[k] = u_N
-				res = true
-			}
+			res = omega.addTInst(u_N)
 		}
 	case PrimitiveLiteral:
 		return res
@@ -240,7 +254,6 @@ func auxGOpen(ds []Decl, delta Delta, omega Nomega) bool {
 }
 
 func auxTOpen(ds []Decl, omega Nomega) bool {
-	res := false
 	tmp := make(map[string]Type)
 	for _, u := range omega.us {
 		u_N, isTNamed := u.(TNamed)
@@ -254,17 +267,10 @@ func auxTOpen(ds []Decl, omega Nomega) bool {
 			tmp[tokeyWtOpen(srcInst)] = srcInst
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addTInsts(tmp)
 }
 
 func auxFOpen(ds []Decl, omega Nomega) bool {
-	res := false
 	tmp := make(map[string]Type)
 	for _, u := range omega.us {
 		if u_S, ok := u.Underlying(ds).(STypeLit); ok {
@@ -273,17 +279,10 @@ func auxFOpen(ds []Decl, omega Nomega) bool {
 			}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addTInsts(tmp)
 }
 
 func auxIOpen(ds []Decl, delta Delta, omega Nomega) bool {
-	res := false
 	tmp := make(map[string]MethInstanOpen)
 	for _, m := range omega.ms {
 		if !isIfaceType(ds, m.u_recv) { // want both named and anonymous ifaces
@@ -302,17 +301,10 @@ func auxIOpen(ds []Decl, delta Delta, omega Nomega) bool {
 			}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.ms[k]; !ok {
-			omega.ms[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addMInsts(tmp)
 }
 
 func auxMOpen(ds []Decl, delta Delta, omega Nomega) bool {
-	res := false
 	tmp := make(map[string]Type)
 	for _, m := range omega.ms {
 		sig := methodsDelta(ds, delta, m.u_recv)[m.meth]
@@ -324,13 +316,7 @@ func auxMOpen(ds []Decl, delta Delta, omega Nomega) bool {
 		u_ret := sig.u_ret.SubsEtaOpen(eta)
 		tmp[tokeyWtOpen(u_ret)] = u_ret
 	}
-	for k, v := range tmp {
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addTInsts(tmp)
 }
 
 func auxSOpen(ds []Decl, delta Delta, omega Nomega) bool {
@@ -363,13 +349,7 @@ func auxSOpen(ds []Decl, delta Delta, omega Nomega) bool {
 			//}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.ms[k]; !ok {
-			omega.ms[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addMInsts(tmp) || res
 }
 
 // Add embedded types
@@ -383,9 +363,10 @@ func auxE1Open(ds []Decl, omega Nomega) bool {
 					tmp[tokeyWtOpen(u_emb)] = u_emb
 				}
 			}
-		} //else if todo CHECKME: type param -------------------------------------------
+		} //else if todo CHECKME: type param
 
 	}
+	// not using omega.addTInsts due to tmp mapping to TNameds
 	for k, v := range tmp {
 		if _, ok := omega.us[k]; !ok {
 			omega.us[k] = v
@@ -397,7 +378,6 @@ func auxE1Open(ds []Decl, omega Nomega) bool {
 
 // Propagate method instances up to embedded supertypes
 func auxE2Open(ds []Decl, omega Nomega) bool {
-	res := false
 	tmp := make(map[string]MethInstanOpen)
 	for _, m := range omega.ms {
 		if !isIfaceType(ds, m.u_recv) {
@@ -413,13 +393,7 @@ func auxE2Open(ds []Decl, omega Nomega) bool {
 			}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.ms[k]; !ok {
-			omega.ms[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addMInsts(tmp)
 }
 
 /*

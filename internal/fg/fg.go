@@ -2,7 +2,6 @@ package fg
 
 import "github.com/rhu1/fgg/internal/base"
 
-
 /* Aliases from base */
 
 type Name = base.Name
@@ -32,7 +31,7 @@ type Type interface {
 // be applied to the desired FGExpr (Cf. e.g. Call.Typing)
 type Coercion func(FGExpr) FGExpr
 
-func noOpCoercion (expr FGExpr) FGExpr { return expr }
+func noOpCoercion(expr FGExpr) FGExpr { return expr }
 
 /* AST base interfaces: FGNode, Decl, Spec, Expr */
 

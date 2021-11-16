@@ -45,7 +45,6 @@ var (
 	Empty_Pds   = []fg.ParamDecl{}
 )
 
-
 /* Monomorph: FGGProgram -> FGProgram */
 
 func Monomorph(p FGGProgram) fg.FGProgram {
@@ -194,7 +193,7 @@ func monomMDecl1(omega Omega, md MethDecl) []fg.MethDecl {
 		for i := 0; i < len(md.Psi_meth.tFormals); i++ {
 			theta[md.Psi_meth.tFormals[i].name] = m.psi[i].(GroundType)
 		}
-		recv_monom := fg.NewParamDecl(md.x_recv, toMonomId(u_recv))                  // !!! t_S(phi) already ground receiver
+		recv_monom := fg.NewParamDecl(md.x_recv, toMonomId(u_recv))                           // !!! t_S(phi) already ground receiver
 		g_monom := monomSig1(Sig{md.name, md.Psi_meth, md.pDecls, md.u_ret}, m, theta, omega) // !!! small psi
 		e_monom := monomExpr1(md.e_body, theta, omega)
 		md_monom := fg.NewMDecl(recv_monom,
@@ -283,7 +282,6 @@ func monomExpr1(e1 FGGExpr, eta EtaClosed, omega Omega) fg.FGExpr {
 
 /* Helpers */
 
-
 /*// Pre: len(targs) > 0
 func getMonomMethName(omega Omega, m Name, targs []Type) Name {
 	first := toMonomId(omega[toWKey(targs[0].(TNamed))].u_ground)
@@ -295,7 +293,6 @@ func getMonomMethName(omega Omega, m Name, targs []Type) Name {
 	res = res + ">"
 	return Name(res)
 }*/
-
 
 func toMonomId(u TNamed) fg.TNamed {
 	res := u.String()
@@ -354,7 +351,7 @@ func toHashSig(g Sig) string {
 		b.WriteString(v.u.String())
 	}
 	b.WriteString("_")
-	b.WriteString(g1.u_ret.String())
+	b.WriteString(g1.u_ret.String()) // TODO upon generating dummy sigs this shouldn't be done, as the ret type will be Top
 	res := b.String()
 	res = strings.Replace(res, "(", "_", -1) // TODO
 	res = strings.Replace(res, ")", "_", -1)

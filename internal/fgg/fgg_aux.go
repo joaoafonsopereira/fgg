@@ -94,8 +94,8 @@ func methodsDelta(ds []Decl, delta Delta, u Type) MethodSet {
 // Submission version, m(~\rho) informal notation
 //func body(ds []Decl, u_S TNamed, m Name, targs []Type) (Name, []Name, FGGExpr) {
 func body(ds []Decl, u_S TNamed, m Name, targs []Type) (ParamDecl, []ParamDecl, FGGExpr) {
-	md := getMethDecl(ds, u_S.t_name, m) // panics if not found
-	theta := MakeEtaOpen(md.Psi_recv, u_S.u_args) // cf MakeEta
+	md := getMethDecl(ds, u_S.t_name, m)             // panics if not found
+	theta := MakeEtaOpen(md.Psi_recv, u_S.u_args)    // cf MakeEta
 	for i := 0; i < len(md.Psi_meth.tFormals); i++ { //TODO TSubs.add() ..., TSubs vs SubsEtaOpen
 		theta[md.Psi_meth.tFormals[i].name] = targs[i]
 	}

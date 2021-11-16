@@ -15,10 +15,10 @@ type GroundType interface { // TODO move??
 }
 
 // kind of a sum type
-func (u TNamed) Ground()     {}
-func (u STypeLit) Ground()   {}
-func (u ITypeLit) Ground()    {}
-func (t0 TPrimitive) Ground() {}
+func (u TNamed) Ground()           {}
+func (u STypeLit) Ground()         {}
+func (u ITypeLit) Ground()         {}
+func (t0 TPrimitive) Ground()      {}
 func (t0 UndefTPrimitive) Ground() {}
 
 // Basically a Gamma for only ground types
@@ -48,23 +48,45 @@ type Omega struct {
 	ms map[string]MethInstan
 }
 
-//func (w Omega) addTInst(u GroundType) bool {
-//	key := toKey_Wt(u)
-//	if _, ok := w.us[key]; ok {
-//		w.us[key] = u
-//		return true
-//	}
-//	return false
-//}
-//
-//func (w Omega) addMInst(m MethInstan) bool {
-//	key := toKey_Wm(m)
-//	if _, ok := w.ms[key]; ok {
-//		w.ms[key] = m
-//		return true
-//	}
-//	return false
-//}
+func (w Omega) addTInst(u GroundType) bool {
+	key := toKey_Wt(u)
+	if _, ok := w.us[key]; !ok {
+		w.us[key] = u
+		return true
+	}
+	return false
+}
+
+func (w Omega) addTInsts(insts map[string]GroundType) bool {
+	res := false
+	for k, u := range insts {
+		if _, ok := w.us[k]; !ok {
+			w.us[k] = u
+			res = true
+		}
+	}
+	return res
+}
+
+func (w Omega) addMInst(m MethInstan) bool {
+	key := toKey_Wm(m)
+	if _, ok := w.ms[key]; !ok {
+		w.ms[key] = m
+		return true
+	}
+	return false
+}
+
+func (w Omega) addMInsts(ms map[string]MethInstan) bool {
+	res := false
+	for k, m := range ms {
+		if _, ok := w.ms[k]; !ok {
+			w.ms[k] = m
+			res = true
+		}
+	}
+	return res
+}
 
 func (w Omega) clone() Omega {
 	us := make(map[string]GroundType)
@@ -134,11 +156,7 @@ func collectExpr(ds []Decl, gamma GroundGamma, omega Omega, e FGGExpr) bool {
 	case StructLit:
 		res = collectExprs(ds, gamma, omega, e1.elems...)
 		u_S := e1.u_S.(GroundType)
-		k := toKey_Wt(u_S)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = u_S
-			res = true
-		}
+		res = omega.addTInst(u_S) || res
 	case Select:
 		return collectExpr(ds, gamma, omega, e1.e_S)
 	case Call:
@@ -148,36 +166,22 @@ func collectExpr(ds []Decl, gamma GroundGamma, omega Omega, e FGGExpr) bool {
 		for k, v := range gamma {
 			gamma1[k] = v
 		}
-		
+
 		tmp, _ := e1.e_recv.Typing(ds, make(Delta), gamma1, false)
 		ground_recv := tmp.(GroundType)
-		k_t := toKey_Wt(ground_recv)
-		if _, ok := omega.us[k_t]; !ok {
-			omega.us[k_t] = ground_recv
-			res = true
-		}
+		res = omega.addTInst(ground_recv) || res
+
 		m := MethInstan{ground_recv, e1.meth, e1.GetTArgs()} // N.B. type/method instans recorded separately
-		k_m := toKey_Wm(m)
-		if _, ok := omega.ms[k_m]; !ok {
-			omega.ms[k_m] = m
-			res = true
-		}
+		res = omega.addMInst(m) || res
+
 	case Assert:
 		res = collectExpr(ds, gamma, omega, e1.e_I)
 		ground := e1.u_cast.(GroundType)
-		k := toKey_Wt(ground)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = ground
-			res = true
-		}
+		res = omega.addTInst(ground) || res
 	case Convert:
 		res = collectExpr(ds, gamma, omega, e1.expr)
 		ground := e1.typ.(GroundType)
-		k := toKey_Wt(ground)
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = ground
-			res = true
-		}
+		res = omega.addTInst(ground) || res
 	case Sprintf:
 		res = collectExprs(ds, gamma, omega, e1.args...)
 
@@ -190,11 +194,7 @@ func collectExpr(ds []Decl, gamma GroundGamma, omega Omega, e FGGExpr) bool {
 	// type MyInt[T any] int32
 	case TypedPrimitiveValue:
 		if u_N, ok := e1.typ.(TNamed); ok {
-			k := toKey_Wt(u_N)
-			if _, ok := omega.us[k]; !ok {
-				omega.us[k] = u_N
-				res = true
-			}
+			res = omega.addTInst(u_N)
 		}
 	case PrimitiveLiteral:
 		return res
@@ -228,7 +228,7 @@ func auxG(ds []Decl, omega Omega) bool {
 	// I/face embeddings
 	res = auxE1(ds, omega) || res
 	res = auxE2(ds, omega) || res
-	//res = auxP(ds, omega) || res
+	// type declarations
 	res = auxT(ds, omega) || res
 	return res
 }
@@ -240,7 +240,6 @@ func auxG(ds []Decl, omega Omega) bool {
 //PairEq := "type PairEq(type T Any()) Pair(T, T)"
 //PairInt := "type PairInt(type ) PairEq(int32)"
 func auxT(ds []Decl, omega Omega) bool {
-	res := false
 	tmp := make(map[string]GroundType)
 	for _, u := range omega.us {
 		u_N, isTNamed := u.(TNamed)
@@ -254,18 +253,10 @@ func auxT(ds []Decl, omega Omega) bool {
 			tmp[toKey_Wt(ground_src)] = ground_src
 		}
 	}
-	// TODO factor this cycle into a function ?
-	for k, v := range tmp {
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addTInsts(tmp)
 }
 
 func auxF(ds []Decl, omega Omega) bool {
-	res := false
 	tmp := make(map[string]GroundType)
 	for _, u := range omega.us {
 		// underlying of a ground type is itself ground
@@ -277,17 +268,10 @@ func auxF(ds []Decl, omega Omega) bool {
 			}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addTInsts(tmp)
 }
 
 func auxI(ds []Decl, omega Omega) bool {
-	res := false
 	tmp := make(map[string]MethInstan)
 	for _, m := range omega.ms {
 		if !isIfaceType(ds, m.u_recv) {
@@ -306,17 +290,10 @@ func auxI(ds []Decl, omega Omega) bool {
 			}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.ms[k]; !ok {
-			omega.ms[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addMInsts(tmp)
 }
 
 func auxM(ds []Decl, omega Omega) bool {
-	res := false
 	tmp := make(map[string]GroundType)
 	for _, m := range omega.ms {
 		sig := methods(ds, m.u_recv)[m.meth]
@@ -328,13 +305,7 @@ func auxM(ds []Decl, omega Omega) bool {
 		u_ret := sig.u_ret.SubsEtaClosed(eta)
 		tmp[toKey_Wt(u_ret)] = u_ret
 	}
-	for k, v := range tmp {
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addTInsts(tmp)
 }
 
 func auxS(ds []Decl, delta Delta, omega Omega) bool {
@@ -366,18 +337,11 @@ func auxS(ds []Decl, delta Delta, omega Omega) bool {
 			//}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.ms[k]; !ok {
-			omega.ms[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addMInsts(tmp) || res
 }
 
 // Add embedded types
 func auxE1(ds []Decl, omega Omega) bool {
-	res := false
 	tmp := make(map[string]GroundType)
 	for _, u := range omega.us {
 		if u_I, ok := u.Underlying(ds).(ITypeLit); ok {
@@ -391,18 +355,11 @@ func auxE1(ds []Decl, omega Omega) bool {
 			}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.us[k]; !ok {
-			omega.us[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addTInsts(tmp)
 }
 
 // Propagate method instances up to embedded supertypes
 func auxE2(ds []Decl, omega Omega) bool {
-	res := false
 	tmp := make(map[string]MethInstan)
 	for _, m := range omega.ms {
 		if !isIfaceType(ds, m.u_recv) {
@@ -418,13 +375,7 @@ func auxE2(ds []Decl, omega Omega) bool {
 			}
 		}
 	}
-	for k, v := range tmp {
-		if _, ok := omega.ms[k]; !ok {
-			omega.ms[k] = v
-			res = true
-		}
-	}
-	return res
+	return omega.addMInsts(tmp)
 }
 
 /* Helpers */

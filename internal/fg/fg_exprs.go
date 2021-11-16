@@ -13,7 +13,7 @@ import (
 /* "Exported" constructors for fgg (monomorph) */
 
 func NewVariable(id Name) Variable                    { return Variable{id} }
-func NewStructLit(t Type, es []FGExpr) StructLit    { return StructLit{t, es} }
+func NewStructLit(t Type, es []FGExpr) StructLit      { return StructLit{t, es} }
 func NewSelect(e FGExpr, f Name) Select               { return Select{e, f} }
 func NewCall(e FGExpr, m Name, es []FGExpr) Call      { return Call{e, m, es} }
 func NewAssert(e FGExpr, t Type) Assert               { return Assert{e, t} }
