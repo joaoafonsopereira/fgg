@@ -330,13 +330,33 @@ func (i ITypeLit) AssignableTo(ds []Decl, t Type) (bool, Coercion) {
 	return false, nil
 }
 
-func (t0 ITypeLit) Equals(t base.Type) bool {
-	//t_I, ok := t.(ITypeLit)
-	//if !ok {
-	//	return false
-	//}
-	//ms0 := methods(ds, t)
-	panic("implement me") // TODO how to 'transform' embedded interface into MethodSet without access to Decls?
+func (i ITypeLit) Equals(t base.Type) bool {
+	other, ok := t.(ITypeLit)
+	if !ok {
+		return false
+	}
+	// goal: methodSet(i) == methodSet(other), regardless of order
+	// > this version is still sensible to order (todo)
+	for idx, spec := range i.specs {
+		if !specEquals(spec, other.specs[idx]) {
+			return false
+		}
+	}
+	return true
+}
+
+func specEquals(s1, s2 Spec) bool {
+	switch s1 := s1.(type) {
+	case TNamed:
+		if named, ok := s2.(TNamed); ok {
+			return s1.Equals(named)
+		}
+	case Sig:
+		if g2, ok := s2.(Sig); ok {
+			return s1.EqExceptVars(g2)
+		}
+	}
+	return false
 }
 
 func (i ITypeLit) String() string {

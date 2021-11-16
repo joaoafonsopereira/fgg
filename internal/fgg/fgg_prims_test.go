@@ -65,8 +65,8 @@ func Test021b(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) id(type )(i float32) float32 { return i }"
 	e := "A(){}.id()(1 + 41.0)"
-	//fggParseAndOkGood(t, A, Am, e)
-	fggParseAndOkMonomGood(t, A, Am, e)
+	prog := fggParseAndOkMonomGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 3)
 }
 
 func Test021c(t *testing.T) {
@@ -165,7 +165,6 @@ func Test025b(t *testing.T) {
 	testutils.EvalAndOkGood(t, prog, 3)
 }
 
-
 // Testing case where a variable (e.g. a struct field) has an interface
 // literal - containing a generic method spec -  as its declared type.
 func Test111(t *testing.T) {
@@ -179,7 +178,7 @@ func Test111(t *testing.T) {
 	_ = prog
 }
 // Testing cases where the only instantiation of a generic type
-// appears in the definition of another type.
+// appears in the definition of another type. (func auxT in fgg_omega)
 func Test200(t *testing.T) {
 	Any := "type Any(type ) interface {}"
 	Pair := "type Pair(type X Any(), Y Any()) struct { x X; y Y}"

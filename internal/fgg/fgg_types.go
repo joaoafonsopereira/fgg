@@ -21,7 +21,7 @@ func NewUndefTPrimitive(t Tag) UndefTPrimitive        { return UndefTPrimitive{t
 func ImplsDelta(ds []Decl, delta Delta, u0 Type, u_I ITypeLit) bool {
 	if u_I.HasTList() {
 		tlist := u_I.FlatTList(ds)
-		if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // TODO initial version; not accounting for https://github.com/golang/go/issues/45346
+		if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // TODO initial version; not accounting for type sets proposal -- https://github.com/golang/go/issues/45346
 			return false
 		}
 	}
@@ -89,7 +89,7 @@ func (a TParam) AssignableToDelta(ds []Decl, delta Delta, u Type) (bool, Coercio
 		if a.Equals(a1) {
 			return true, noOpCoercion
 		}
-	} else if isIfaceLikeType(ds, u) { // todo review this -- which types can a TParam implement?
+	} else if isIfaceLikeType(ds, u) {
 		gs0 := methodsDelta(ds, delta, a)
 		gs := methodsDelta(ds, delta, u)
 		for k, g := range gs {
@@ -187,7 +187,7 @@ func (u0 TNamed) ImplsDelta(ds []Decl, delta Delta, u Type) bool {
 	case ITypeLit:
 		if u.HasTList() {
 			tlist := u.FlatTList(ds)
-			if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // TODO initial version; not accounting for https://github.com/golang/go/issues/45346
+			if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // todo initial version; not accounting for type sets proposal -- https://github.com/golang/go/issues/45346
 				return false
 			}
 		}
@@ -800,7 +800,7 @@ func (tlist0 TypeList) Ok(ds []Decl, delta Delta) {
 		if isIfaceType(ds, u) {
 			under := u.Underlying(ds).(ITypeLit)
 			if under.HasTList() {
-				panic("") // todo   "interface Contains type constraints", according to go2goplay
+				panic("interface Contains type constraints: " + under.String()) //according to go2goplay
 			}
 		}
 		u.Ok(ds, delta)

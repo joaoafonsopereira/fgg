@@ -206,7 +206,7 @@ func MakeEtaClosed(Psi BigPsi, psi SmallPsi) EtaClosed {
 	eta := make(EtaClosed)
 	tfs := Psi.tFormals
 	for i := 0; i < len(tfs); i++ {
-		eta[tfs[i].name] = psi[i].(GroundType) // TODO maybe SmallPsi could be []GroundType ?
+		eta[tfs[i].name] = psi[i].(GroundType)
 	}
 	return eta
 }
