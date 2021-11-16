@@ -147,8 +147,12 @@ func (x PrimitiveLiteral) String() string {
 		payload = strconv.FormatBool(p)
 	case string:
 		payload = "\"" + p + "\""
+	case int32:
+		payload = strconv.FormatInt(int64(p), 10)
 	case int64:
 		payload = strconv.FormatInt(p, 10)
+	case float32:
+		payload = strconv.FormatFloat(float64(p), 'E', -1, 32)
 	case float64:
 		payload = strconv.FormatFloat(p, 'E', -1, 64)
 	default:
@@ -216,7 +220,7 @@ func (x TypedPrimitiveValue) ToGoString(ds []base.Decl) string {
 
 func newIntLit(lit string) (PrimitiveLiteral, bool) {
 	if i, err := strconv.ParseInt(lit, 10, 32); err == nil {
-		return PrimitiveLiteral{i, INT32}, true
+		return PrimitiveLiteral{int32(i), INT32}, true
 	}
 	if i, err := strconv.ParseInt(lit, 10, 64); err == nil {
 		return PrimitiveLiteral{i, INT64}, true
@@ -226,7 +230,7 @@ func newIntLit(lit string) (PrimitiveLiteral, bool) {
 
 func newFloatLit(lit string) (PrimitiveLiteral, bool) {
 	if f, err := strconv.ParseFloat(lit, 32); err == nil {
-		return PrimitiveLiteral{f, FLOAT32}, true
+		return PrimitiveLiteral{float32(f), FLOAT32}, true
 	}
 	if f, err := strconv.ParseFloat(lit, 64); err == nil {
 		return PrimitiveLiteral{f, FLOAT64}, true

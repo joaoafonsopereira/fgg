@@ -5,14 +5,12 @@ import (
 	"testing"
 )
 
-// For now, all these tests are just the adaptation of the fg tests in fg_primitives_test
-
 func Test019(t *testing.T) {
 	A := "type A(type ) struct { a int32 }"
 	Am := "func (x0 A(type )) id(type )(i int32) int32 { return i }"
 	e := "A(){5}.id()(10)"
-	//fggParseAndOkGood(t, A, Am, e)
-	fggParseAndOkMonomGood(t, A, Am, e)
+	prog := fggParseAndOkMonomGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 3)
 }
 
 // int literal implements Any
@@ -22,8 +20,8 @@ func Test019b(t *testing.T) {
 	Am := "func (x0 A(type )) m(type )(i Any()) Any() { return i }"
 	e := "A(){}.m()(5)"
 
-	//fggParseAndOkGood(t, Any, A, Am, e)
-	fggParseAndOkMonomGood(t, Any, A, Am, e)
+	prog := fggParseAndOkMonomGood(t, Any, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 1)
 }
 
 // struct doesn't implement int32
@@ -57,8 +55,8 @@ func Test021(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) id(type )(i int32) int32 { return i }"
 	e := "A(){}.id()(1 + 41.0)"
-	//fggParseAndOkGood(t, A, Am, e)
-	fggParseAndOkMonomGood(t, A, Am, e)
+	prog := fggParseAndOkMonomGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 3)
 }
 
 func Test021b(t *testing.T) {
@@ -73,7 +71,7 @@ func Test021c(t *testing.T) {
 	A := "type A(type ) struct {}"
 	Am := "func (x0 A(type )) id(type )(i int32) int32 { return i }"
 	e := "A(){}.id()(1 + 41.1)"
-	fggParseAndOkBad(t,"", A, Am, e)
+	fggParseAndOkBad(t, "", A, Am, e)
 }
 
 // Comparisons and logical ops
@@ -90,27 +88,22 @@ func Test023(t *testing.T) {
 	Am := "func (x0 A(type )) add(type )(x int32, y int32) int32 { return x+y }"
 	e := "A(){}.add()(2147483647, 1)"
 	//fggParseAndOkGood(t, A, Am, e)
-	fggParseAndOkMonomGood(t, A, Am, e)
-	//prog := fggParseAndOkGood(t, A, Am, e)
-	//testutils.EvalAndOkGood(t, prog, 3)
+	//fggParseAndOkMonomGood(t, A, Am, e)
+	prog := fggParseAndOkGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 4)
 }
 
 func Test023b(t *testing.T) {
 	A := "type A(type ) struct {x int32}"
 	Am := "func (x0 A(type )) add1(type )() int32 { return x0.x + 1 }"
 	e := "A(){2147483647}.add1()()"
-	//fggParseAndOkGood(t, A, Am, e)
-	fggParseAndOkMonomGood(t, A, Am, e)
-	//prog := fggParseAndOkGood(t, A, Am, e)
-	//testutils.EvalAndOkGood(t, prog, 4)
+	prog := fggParseAndOkMonomGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 4)
 }
 
 func Test023c(t *testing.T) {
 	A := "type A(type ) struct {}"
 	e := "\"a\" + \"b\""
-	//prog := fggParseAndOkGood(t, A, e)
-
-	//prog := fggParseAndOkMonomGood(t, A, e)
 	prog := fggParseAndOkMonomGood(t, A, e)
 	testutils.EvalAndOkGood(t, prog, 1)
 }
@@ -144,25 +137,34 @@ func Test024b(t *testing.T) {
 // Test primitive ops with defined/named types
 func Test025(t *testing.T) {
 	A := "type A(type ) struct {}"
-	AFact :="func (a A(type )) NewMyInt(type )(x MyInt()) MyInt() {return x}"
+	AFact := "func (a A(type )) NewMyInt(type )(x MyInt()) MyInt() {return x}"
 	MyInt := "type MyInt(type ) int32"
 	Am := "func (x MyInt(type )) incr(type )() MyInt() {return x + 1}"
 	e := "A(){}.NewMyInt()(1).incr()()"
-	//fggParseAndOkGood(t, A, AFact, MyInt, Am, e)
-	prog := fggParseAndOkGood(t, A, AFact, MyInt, Am, e)
+	prog := fggParseAndOkMonomGood(t, A, AFact, MyInt, Am, e)
 	testutils.EvalAndOkGood(t, prog, 3)
-
 }
 
 func Test025b(t *testing.T) {
 	A := "type A(type ) struct {}"
-	AFact :="func (a A(type )) NewMyString(type )(x MyString()) MyString() {return x}"
+	AFact := "func (a A(type )) NewMyString(type )(x MyString()) MyString() {return x}"
 	MyString := "type MyString(type ) string"
 	Am := "func (x MyString(type )) incr(type )() MyString() {return x + \"a\"}"
 	e := "A(){}.NewMyString()(\"ol\").incr()()"
-	//fggParseAndOkGood(t, A, AFact, MyString, Am, e)
-	prog := fggParseAndOkGood(t, A, AFact, MyString, Am, e)
+	prog := fggParseAndOkMonomGood(t, A, AFact, MyString, Am, e)
 	testutils.EvalAndOkGood(t, prog, 3)
+}
+
+// Testing instantiation of generic method with a Named type (MyInt)
+func Test026(t *testing.T) {
+	Any := "type Any(type ) interface {}"
+	A := "type A(type ) struct {}"
+	Am := "func (a A(type )) id(type T Any())(x T) T { return x }"
+	MyInt := "type MyInt(type ) int32"
+	MyIntM := "func (m MyInt(type )) incr(type )() MyInt() { return m + 1 }"
+	e := "A(){}.id(MyInt())(25).incr()()"
+	prog := fggParseAndOkMonomGood(t, Any, A, Am, MyInt, MyIntM, e)
+	testutils.EvalAndOkGood(t, prog, 2)
 }
 
 // Testing case where a variable (e.g. a struct field) has an interface
@@ -177,6 +179,7 @@ func Test111(t *testing.T) {
 	testutils.EvalAndOkGood(t, prog, 2)
 	_ = prog
 }
+
 // Testing cases where the only instantiation of a generic type
 // appears in the definition of another type. (func auxT in fgg_omega)
 func Test200(t *testing.T) {
@@ -186,7 +189,7 @@ func Test200(t *testing.T) {
 	e := "PairInt(){1,2}.x + 1"
 	prog := fggParseAndOkMonomGood(t, Any, Pair, PairInt, e)
 	testutils.EvalAndOkGood(t, prog, 2)
-	_ =  prog
+	_ = prog
 }
 
 func Test200b(t *testing.T) {
@@ -197,9 +200,8 @@ func Test200b(t *testing.T) {
 	e := "PairInt(){1,2}.x + 1"
 	prog := fggParseAndOkMonomGood(t, Any, Pair, PairEq, PairInt, e)
 	testutils.EvalAndOkGood(t, prog, 2)
-	_ =  prog
+	_ = prog
 }
-
 
 /* Type lists */
 
@@ -209,7 +211,6 @@ func TestTLists001(t *testing.T) {
 	S := "type S(type ) struct {}"
 	Sm := "func (s S(type )) add(type T IConstr())(x T) T { return x + x }"
 	e := "S(){}.add(int32)(5)"
-	//fggParseAndOkGood(t, A, S, Sm, e)
 	prog := fggParseAndOkMonomGood(t, A, S, Sm, e)
 	testutils.EvalAndOkGood(t, prog, 2)
 }
@@ -221,7 +222,7 @@ func TestTLists001b(t *testing.T) {
 	Sm := "func (s S(type )) add(type T IConstr())(x T) T { return x + x }"
 	MyInt := "type MyInt(type ) int32"
 	e := "S(){}.add(MyInt())(5)"
-	prog := fggParseAndOkMonomGood(t,  A, S, Sm, MyInt, e)
+	prog := fggParseAndOkMonomGood(t, A, S, Sm, MyInt, e)
 	testutils.EvalAndOkGood(t, prog, 2)
 }
 
@@ -330,6 +331,31 @@ func TestTLists005b(t *testing.T) {
 	S := "type S(type ) struct {}"
 	ToString := "func (s S(type )) ToString(type T MyIntOrFloatStringer())(v T) string { return v.String()() }"
 	e := "S(){}.ToString(MyInt())(1)"
-	fggParseAndOkGood(t, S, MyInt, MyIntS, MyFloat, MyFloatS, MyIorF, ToString, e)
+	prog := fggParseAndOkMonomGood(t, S, MyInt, MyIntS, MyFloat, MyFloatS, MyIorF, ToString, e)
+	testutils.EvalAndOkGood(t, prog, 4)
 }
 
+/******************************************************************************/
+/* Tests that show that some form of coercion is necessary */
+
+func TestIntLit(t *testing.T) {
+	NumericS := "type NumericS(type ) interface { type int32, float32; String(type )() string }"
+	//Sadd := "func (s S()) Add(type N Numeric())(x N) { return x + 1 }"
+	Sadd := "func (s S(type )) Ret1(type N NumericS())() N { return 1 }"
+	MyInt := "type MyInt(type ) int32"
+	MyIntS := "func (m MyInt(type )) String(type )() string { return \"myint\" }"
+	e := "S(){}.Ret1(MyInt())().String()()"
+	prog := fggParseAndOkMonomGood(t, S, NumericS, Sadd, MyInt, MyIntS, e)
+	testutils.EvalAndOkGood(t, prog, 4)
+}
+
+//func TestIntLit2(t *testing.T) {
+//	NumericS := "type NumericS(type ) interface { type int32, float32; String(type )() string }"
+//	//Sadd := "func (s S()) Add(type N Numeric())(x N) { return x + 1 }"
+//	Sadd := "func (s S(type )) Ret1(type N NumericS())() N { return 1 }"
+//	AsMyInt := "func (s S(type )) AsMyInt(type )(x MyInt()) MyInt() { return x }"
+//	MyInt := "type MyInt(type ) int32"
+//	MyIntS := "func (m MyInt(type )) String(type )() string { return \"myint\" }"
+//	e := "S(){}.Ret1(MyInt())( S(){}.AsMyInt()(1)   ).String()()"
+//	fggParseAndOkGood(t, S, NumericS, Sadd, MyInt, MyIntS, e)
+//}
