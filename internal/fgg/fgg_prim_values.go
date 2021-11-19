@@ -262,7 +262,7 @@ var (
 	isInt        = func(t_P PrimType) bool { return t_P.Tag() == INT32 || t_P.Tag() == INT64 }
 	isFloat      = func(t_P PrimType) bool { return t_P.Tag() == FLOAT32 || t_P.Tag() == FLOAT64 }
 	isNumeric    = Or(isInt, isFloat)
-	isComparable = func(_ PrimType) bool { return true } // enough to be a TPrimitive (underlying) ??
+	isComparable = func(t_P PrimType) bool { return t_P.Tag() != BOOL }
 )
 
 func Or(pred1, pred2 PrimtPredicate) PrimtPredicate {
