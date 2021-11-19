@@ -558,7 +558,7 @@ func (a Assert) ToGoString(ds []Decl) string {
 // Simplified version of Go's type conversions.
 // The main goal is to allow conversions such as:
 //   - int32(1), MyInt(1), MyInt(int32(1))
-//   - struct{} <> S{}
+//   - S(struct{}{}), struct{}(S{})
 // Essentially, it only supports conversions between types with similar
 // underlying types (Cf. validConversion).
 // In particular, conversions such as float32(int32(1)) are not supported.
@@ -583,19 +583,68 @@ func (c Convert) Eval(ds []Decl) (FGGExpr, string) {
 		return Convert{c.typ, e}, rule
 	}
 
+	var converted FGGExpr
 	switch e := c.expr.(type) {
 	case PrimitiveLiteral:
-		if undef, ok := c.typ.(UndefTPrimitive); ok {
-			return PrimitiveLiteral{e, undef.Tag()}, "Convert"
+		ptype := c.typ.Underlying(ds).(PrimType)
+		convdLit := rawConversion(e, ptype.Tag())
+		if _, ok := c.typ.(UndefTPrimitive); ok {
+			converted = convdLit
 		} else {
-			return TypedPrimitiveValue{e, c.typ}, "Convert"
+			converted = TypedPrimitiveValue{convdLit, c.typ}
 		}
 	case TypedPrimitiveValue:
-		return TypedPrimitiveValue{e.lit, c.typ}, "Convert"
+		converted = TypedPrimitiveValue{e.lit, c.typ}
 	case StructLit:
-		return StructLit{c.typ, e.elems}, "Convert"
+		converted = StructLit{c.typ, e.elems}
+	default:
+		panic("Unsupported conversion: " + c.String())
 	}
-	panic("Unsupported conversion: " + c.String())
+	return converted, "Convert"
+}
+
+// Performs the conversion falling back on actual Go conversions.
+// N.B. For each Tag case, switches *only* on the types that
+// lit.payload might have (in a correct conversion).
+// Todo factor this with the exactly equal FG code
+func rawConversion(lit PrimitiveLiteral, tag Tag) PrimitiveLiteral {
+	var convdPayload interface{}
+	switch tag {
+	case BOOL, STRING:
+		convdPayload = lit.payload // payload can only be bool/string
+
+	case INT32:
+		pload := lit.payload.(int32) // lit.payload can only be int32
+		convdPayload = int32(pload)  //  redundant
+	case INT64:
+		switch pload := lit.payload.(type) {
+		case int32:
+			convdPayload = int64(pload)
+		case int64:
+			convdPayload = int64(pload) // redundant
+		}
+	case FLOAT32:
+		switch pload := lit.payload.(type) {
+		case int32:
+			convdPayload = float32(pload)
+		case int64:
+			convdPayload = float32(pload)
+		case float32:
+			convdPayload = float32(pload) // redundant
+		}
+	case FLOAT64:
+		switch pload := lit.payload.(type) {
+		case int32:
+			convdPayload = float64(pload)
+		case int64:
+			convdPayload = float64(pload)
+		case float32:
+			convdPayload = float64(pload)
+		case float64:
+			convdPayload = float64(pload) // redundant
+		}
+	}
+	return PrimitiveLiteral{convdPayload, tag}
 }
 
 func (c Convert) Typing(ds []Decl, delta Delta, gamma Gamma, allowStupid bool) (Type, FGGExpr) {

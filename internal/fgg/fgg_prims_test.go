@@ -349,6 +349,14 @@ func TestIntLit(t *testing.T) {
 	testutils.EvalAndOkGood(t, prog, 4)
 }
 
+// Testing conversions in "constant expressions" (equiv. to fg's TestConvs)
+func TestConvs(t *testing.T) {
+	Sm := "func (s S(type )) foo(type )(x float64) float64 { return x }"
+	e := "S(){}.foo()(100 + 25.52)"
+	prog := fggParseAndOkGood(t, S, Sm, e)
+	testutils.EvalAndOkGood(t, prog, 4)
+}
+
 //func TestIntLit2(t *testing.T) {
 //	NumericS := "type NumericS(type ) interface { type int32, float32; String(type )() string }"
 //	//Sadd := "func (s S()) Add(type N Numeric())(x N) { return x + 1 }"

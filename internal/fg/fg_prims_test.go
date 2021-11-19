@@ -88,9 +88,8 @@ func Test023(t *testing.T) {
 	A := "type A struct {}"
 	Am := "func (x0 A) add(x int32, y int32) int32 { return x+y }"
 	e := "A{}.add(2147483647, 1)"
-	fgParseAndOkGood(t, A, Am, e)
-	//prog := fgParseAndOkGood(t, A, Am, e)
-	//testutils.EvalAndOkGood(t, prog, 3)
+	prog := fgParseAndOkGood(t, A, Am, e)
+	testutils.EvalAndOkGood(t, prog, 4)
 }
 
 func Test023b(t *testing.T) {
@@ -142,4 +141,13 @@ func TestIntLit(t *testing.T) {
 	prog := fgParseAndOkGood(t, S, Sm, A, Am, e)
 
 	testutils.EvalAndOkGood(t, prog, 3) //Unexpected panic: Method not found: id in int32(undefined)
+}
+
+// Testing conversions in "constant expressions"
+func TestConvs(t *testing.T) {
+	S := "type S struct {}"
+	Sm := "func (this S) foo(x float64) float64 { return x }"
+	e := "S{}.foo(100 + 25.52)"
+	prog := fgParseAndOkGood(t, S, Sm, e)
+	testutils.EvalAndOkGood(t, prog, 4)
 }
