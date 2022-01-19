@@ -19,15 +19,11 @@ func NewUndefTPrimitive(t Tag) UndefTPrimitive        { return UndefTPrimitive{t
 // u_I has type ITypeLit to enforce that the Impls relation is only tested
 // against interface types.
 func ImplsDelta(ds []Decl, delta Delta, u0 Type, u_I ITypeLit) bool {
-	if u_I.HasTList() {
-		tlist := u_I.FlatTList(ds)
-		if !(tlist.Contains(u0) || tlist.Contains(u0.Underlying(ds))) { // TODO initial version; not accounting for type sets proposal -- https://github.com/golang/go/issues/45346
-			return false
-		}
-	}
 	ms0 := methodsDelta(ds, delta, u0)
 	msI := methodsDelta(ds, delta, u_I)
-	return ms0.IsSupersetOf(msI)
+	tlist0 := tlist(ds, u0)
+	tlistI := tlist(ds, u_I)
+	return ms0.IsSupersetOf(msI) && tlist0.RepresentedBy(ds, tlistI)
 }
 
 func EqualsOrImpls(ds []Decl, delta Delta, u0 Type, u Type) bool {
@@ -614,7 +610,7 @@ func (i ITypeLit) HasTList() bool {
 // If there are multiple embedded types, intersection preserves the property
 // that any type argument must satisfy the requirements of all embedded types.
 func (i ITypeLit) FlatTList(ds []Decl) TypeList {
-	res := i.tlist
+	res := i.tlist // todo currently not flattening possible constraints in the type list
 	for _, spec := range i.specs {
 		if emb, ok := spec.(TNamed); ok {
 			emb_under := emb.Underlying(ds).(ITypeLit) // checked in ok
@@ -804,6 +800,27 @@ func (tlist0 TypeList) Ok(ds []Decl, delta Delta) {
 			}
 		}
 		u.Ok(ds, delta)
+	}
+}
+
+func tlist(ds []Decl, u Type) TypeList {
+	if u_I, ok := u.Underlying(ds).(ITypeLit); ok {
+		return u_I.FlatTList(ds)
+	} else {
+		return TypeList{u}
+	}
+}
+
+func (tlist0 TypeList) RepresentedBy(ds []Decl, other TypeList) bool {
+	if len(other) == 0 {
+		return true
+	} else {
+		for _, u := range tlist0 {
+			if ! (other.Contains(u) || other.Contains(u.Underlying(ds))) {
+				return false
+			}
+		}
+		return true
 	}
 }
 
